@@ -24,12 +24,14 @@ func run() error {
 		dryRun     bool
 		verbose    bool
 		test       bool
+		remove     bool
 	)
 
 	flag.StringVar(&configFile, "config", "ctxweaver.yaml", "path to configuration file")
 	flag.BoolVar(&dryRun, "dry-run", false, "print changes without writing files")
 	flag.BoolVar(&verbose, "verbose", false, "print processed files")
 	flag.BoolVar(&test, "test", false, "process test files")
+	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
 	flag.Parse()
 
 	// Load configuration
@@ -82,6 +84,7 @@ func run() error {
 		processor.WithTest(cfg.Test),
 		processor.WithDryRun(dryRun),
 		processor.WithVerbose(verbose),
+		processor.WithRemove(remove),
 	)
 
 	// Process

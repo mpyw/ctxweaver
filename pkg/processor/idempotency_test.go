@@ -69,7 +69,7 @@ func TestIdempotency_FromTestdata(t *testing.T) {
 
 		hasBeforeGo := false
 		for _, sub := range subEntries {
-			if sub.Name() == "before.go" {
+			if sub.Name() == "before.go" || sub.Name() == "before.raw.go" {
 				hasBeforeGo = true
 				break
 			}
@@ -94,10 +94,15 @@ func TestIdempotency_FromTestdata(t *testing.T) {
 
 func runIdempotencyTest(t *testing.T, name, dir string) {
 	t.Run(name, func(t *testing.T) {
-		beforePath := filepath.Join(dir, "before.go")
+		// Try before.raw.go first (intentionally unformatted), then before.go
+		beforePath := filepath.Join(dir, "before.raw.go")
 		before, err := os.ReadFile(beforePath)
 		if err != nil {
-			t.Fatalf("failed to read before.go: %v", err)
+			beforePath = filepath.Join(dir, "before.go")
+			before, err = os.ReadFile(beforePath)
+			if err != nil {
+				t.Fatalf("failed to read before.go: %v", err)
+			}
 		}
 
 		afterPath := filepath.Join(dir, "after.go")
@@ -223,88 +228,305 @@ func TestIdempotency_TemplateChange_SkeletonMode(t *testing.T) {
 	}
 }
 
-// TestIdempotency_TemplateChange_MarkerMode tests that marker mode updates on template change.
-func TestIdempotency_TemplateChange_MarkerMode(t *testing.T) {
-	registry, err := config.NewCarrierRegistry()
-	if err != nil {
-		t.Fatalf("failed to create carrier registry: %v", err)
-	}
+// TestRemove_Basic tests that remove mode removes matching statements.
+func TestRemove_Basic(t *testing.T) {
+	registry, _ := config.NewCarrierRegistry()
+	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
 
+	// First, add instrumentation
+	insertProc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
 	before := readTestdataFile(t, "basic", "before.go")
 
-	// First template with marker mode
-	tmpl1, _ := template.Parse(`defer trace1({{.Ctx}}, {{.FuncName | quote}})`)
-	proc1 := processor.New(registry, tmpl1, []string{"trace1"}, processor.WithMatchMode(processor.MatchModeMarker))
-
-	first, err := proc1.TransformSource(before, "test")
+	instrumented, err := insertProc.TransformSource(before, "test")
 	if err != nil {
-		t.Fatalf("first transform failed: %v", err)
+		t.Fatalf("insert transform failed: %v", err)
 	}
 
-	if !strings.Contains(string(first), "trace1") {
-		t.Error("first transform should contain trace1")
-	}
-	if !strings.Contains(string(first), "//ctxweaver:generated") {
-		t.Error("marker mode should add marker")
+	if !strings.Contains(string(instrumented), "StartSegment") {
+		t.Fatal("instrumentation should have been added")
 	}
 
-	// Second template - IN MARKER MODE, this updates the marked statement
-	tmpl2, _ := template.Parse(`defer trace2({{.Ctx}}, {{.FuncName | quote}})`)
-	proc2 := processor.New(registry, tmpl2, []string{"trace2"}, processor.WithMatchMode(processor.MatchModeMarker))
+	// Then, remove instrumentation
+	removeProc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"}, processor.WithRemove(true))
 
-	second, err := proc2.TransformSource(first, "test")
+	removed, err := removeProc.TransformSource(instrumented, "test")
 	if err != nil {
-		t.Fatalf("second transform failed: %v", err)
+		t.Fatalf("remove transform failed: %v", err)
 	}
 
-	// trace2 replaces trace1
-	if !strings.Contains(string(second), "trace2") {
-		t.Error("second transform should contain trace2")
-	}
-	if strings.Contains(string(second), "trace1") {
-		t.Error("marker mode: trace1 should be replaced by trace2")
+	// Should not contain the instrumentation
+	if strings.Contains(string(removed), "StartSegment") {
+		t.Error("instrumentation should have been removed")
 	}
 
-	// Third run should be stable
-	third, err := proc2.TransformSource(second, "test")
+	// Should be idempotent (removing again should produce same result)
+	removedAgain, err := removeProc.TransformSource(removed, "test")
 	if err != nil {
-		t.Fatalf("third transform failed: %v", err)
+		t.Fatalf("second remove transform failed: %v", err)
 	}
 
-	if diff := cmp.Diff(string(second), string(third)); diff != "" {
-		t.Errorf("marker mode not stable:\n%s", diff)
+	if diff := cmp.Diff(string(removed), string(removedAgain)); diff != "" {
+		t.Errorf("remove not idempotent:\n%s", diff)
 	}
 }
 
-// TestIdempotency_MarkerMode tests marker mode with default template.
-func TestIdempotency_MarkerMode(t *testing.T) {
+// TestRemove_PreservesOtherCode tests that remove mode preserves unrelated code.
+func TestRemove_PreservesOtherCode(t *testing.T) {
 	registry, _ := config.NewCarrierRegistry()
 	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	proc := processor.New(
-		registry,
-		tmpl,
-		[]string{"github.com/newrelic/go-agent/v3/newrelic"},
-		processor.WithMatchMode(processor.MatchModeMarker),
-	)
+
+	// Add instrumentation to code with existing statements
+	insertProc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
+	before := readTestdataFile(t, "preserves_existing_code", "before.go")
+
+	instrumented, err := insertProc.TransformSource(before, "test")
+	if err != nil {
+		t.Fatalf("insert transform failed: %v", err)
+	}
+
+	// Remove instrumentation
+	removeProc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"}, processor.WithRemove(true))
+
+	removed, err := removeProc.TransformSource(instrumented, "test")
+	if err != nil {
+		t.Fatalf("remove transform failed: %v", err)
+	}
+
+	// Original code should still be there
+	checks := []string{
+		"This comment should be preserved",
+		"x := 1",
+		"y := 2",
+		"doSomething(x, y)",
+	}
+
+	for _, check := range checks {
+		if !strings.Contains(string(removed), check) {
+			t.Errorf("missing expected code: %q", check)
+		}
+	}
+}
+
+// TestRemove_DifferentTemplate tests that remove only removes matching statements.
+func TestRemove_DifferentTemplate(t *testing.T) {
+	registry, _ := config.NewCarrierRegistry()
 
 	before := readTestdataFile(t, "basic", "before.go")
 
-	first, err := proc.TransformSource(before, "test")
+	// Add instrumentation with template 1
+	tmpl1, _ := template.Parse(`defer trace1({{.Ctx}}, {{.FuncName | quote}})`)
+	proc1 := processor.New(registry, tmpl1, []string{"trace1"})
+
+	withTrace1, err := proc1.TransformSource(before, "test")
+	if err != nil {
+		t.Fatalf("insert trace1 failed: %v", err)
+	}
+
+	// Add instrumentation with template 2
+	tmpl2, _ := template.Parse(`defer trace2({{.Ctx}}, {{.FuncName | quote}})`)
+	proc2 := processor.New(registry, tmpl2, []string{"trace2"})
+
+	withBoth, err := proc2.TransformSource(withTrace1, "test")
+	if err != nil {
+		t.Fatalf("insert trace2 failed: %v", err)
+	}
+
+	if !strings.Contains(string(withBoth), "trace1") || !strings.Contains(string(withBoth), "trace2") {
+		t.Fatal("both traces should be present")
+	}
+
+	// Remove only trace1
+	removeProc1 := processor.New(registry, tmpl1, []string{"trace1"}, processor.WithRemove(true))
+
+	afterRemove1, err := removeProc1.TransformSource(withBoth, "test")
+	if err != nil {
+		t.Fatalf("remove trace1 failed: %v", err)
+	}
+
+	// trace1 should be gone, trace2 should remain
+	if strings.Contains(string(afterRemove1), "trace1") {
+		t.Error("trace1 should have been removed")
+	}
+	if !strings.Contains(string(afterRemove1), "trace2") {
+		t.Error("trace2 should still be present")
+	}
+}
+
+// TestRemove_SkipDirective tests that statements with //ctxweaver:skip are not removed.
+func TestRemove_SkipDirective(t *testing.T) {
+	tests := map[string]struct {
+		source string
+	}{
+		"skip directive before statement (no space)": {
+			source: `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	//ctxweaver:skip
+	defer trace(ctx, "test.Foo")
+}
+`,
+		},
+		"skip directive before statement (with space)": {
+			source: `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	// ctxweaver:skip
+	defer trace(ctx, "test.Foo")
+}
+`,
+		},
+		"skip directive trailing (no space)": {
+			source: `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	defer trace(ctx, "test.Foo") //ctxweaver:skip
+}
+`,
+		},
+		"skip directive trailing (with space)": {
+			source: `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	defer trace(ctx, "test.Foo") // ctxweaver:skip
+}
+`,
+		},
+		"LegacySimpleHandler - manually written exact match": {
+			// This simulates legacy code where someone manually wrote the exact same
+			// statement that the template would generate, and marked it with skip
+			source: `package test
+
+import "context"
+
+func LegacySimpleHandler(ctx context.Context) {
+	// ctxweaver:skip - manually written before ctxweaver existed
+	defer trace(ctx, "test.LegacySimpleHandler")
+	doWork()
+}
+`,
+		},
+		"LegacyEnrichedHandler - manually written with extra context": {
+			// This simulates legacy code with manually written instrumentation
+			// that has additional comments explaining why it's there
+			source: `package test
+
+import "context"
+
+func LegacyEnrichedHandler(ctx context.Context) {
+	// ctxweaver:skip
+	// This trace was added manually for debugging production issue #1234
+	// Do not auto-generate or remove this
+	defer trace(ctx, "test.LegacyEnrichedHandler")
+	doImportantWork()
+}
+`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			registry, _ := config.NewCarrierRegistry()
+			tmpl, _ := template.Parse(`defer trace({{.Ctx}}, {{.FuncName | quote}})`)
+
+			// Try to remove - should NOT remove because of skip directive
+			removeProc := processor.New(registry, tmpl, []string{"trace"}, processor.WithRemove(true))
+
+			result, err := removeProc.TransformSource([]byte(tt.source), "test")
+			if err != nil {
+				t.Fatalf("remove transform failed: %v", err)
+			}
+
+			// Statement should still be there
+			if !strings.Contains(string(result), "defer trace(ctx") {
+				t.Error("statement with skip directive should NOT be removed")
+			}
+
+			// Skip directive should still be there
+			if !strings.Contains(string(result), "ctxweaver:skip") {
+				t.Error("skip directive should be preserved")
+			}
+		})
+	}
+}
+
+// TestRemove_SkipDirective_PreservesImports tests that imports used by skipped statements are preserved.
+func TestRemove_SkipDirective_PreservesImports(t *testing.T) {
+	registry, _ := config.NewCarrierRegistry()
+	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
+
+	// Source has a manually written statement with skip directive that uses newrelic import
+	source := `package test
+
+import (
+	"context"
+
+	"github.com/newrelic/go-agent/v3/newrelic"
+)
+
+func LegacyHandler(ctx context.Context) {
+	// ctxweaver:skip - manually instrumented
+	defer newrelic.FromContext(ctx).StartSegment("test.LegacyHandler").End()
+	doWork()
+}
+`
+
+	removeProc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"}, processor.WithRemove(true))
+
+	result, err := removeProc.TransformSource([]byte(source), "test")
+	if err != nil {
+		t.Fatalf("remove transform failed: %v", err)
+	}
+
+	// Statement should still be there
+	if !strings.Contains(string(result), "newrelic.FromContext") {
+		t.Error("statement with skip directive should NOT be removed")
+	}
+
+	// Import should still be there (goimports should see it's still used)
+	if !strings.Contains(string(result), `"github.com/newrelic/go-agent/v3/newrelic"`) {
+		t.Error("import used by skipped statement should be preserved")
+	}
+}
+
+// TestSkipDirective_NoInsertOrUpdate tests that statements with skip directive are not updated.
+func TestSkipDirective_NoInsertOrUpdate(t *testing.T) {
+	registry, _ := config.NewCarrierRegistry()
+	tmpl, _ := template.Parse(`defer trace({{.Ctx}}, {{.FuncName | quote}})`)
+
+	// Source has a manually written statement with skip directive but different func name
+	source := `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	// ctxweaver:skip
+	defer trace(ctx, "manually.Written")
+}
+`
+
+	proc := processor.New(registry, tmpl, []string{"trace"})
+
+	result, err := proc.TransformSource([]byte(source), "test")
 	if err != nil {
 		t.Fatalf("transform failed: %v", err)
 	}
 
-	if !strings.Contains(string(first), "//ctxweaver:generated") {
-		t.Error("marker mode should add marker")
+	// Original statement should be preserved (not updated to "test.Foo")
+	if !strings.Contains(string(result), `"manually.Written"`) {
+		t.Error("manually written statement should NOT be updated")
 	}
 
-	second, err := proc.TransformSource(first, "test")
-	if err != nil {
-		t.Fatalf("second transform failed: %v", err)
-	}
-
-	if diff := cmp.Diff(string(first), string(second)); diff != "" {
-		t.Errorf("marker mode not stable:\n%s", diff)
+	// Should NOT have the auto-generated func name
+	if strings.Contains(string(result), `"test.Foo"`) {
+		t.Error("should not have auto-generated func name")
 	}
 }
 

@@ -23,13 +23,13 @@ import (
 
 // Processor handles code transformation.
 type Processor struct {
-	registry  *config.CarrierRegistry
-	tmpl      *template.Template
-	imports   []string
-	matchMode MatchMode
-	test      bool
-	dryRun    bool
-	verbose   bool
+	registry *config.CarrierRegistry
+	tmpl     *template.Template
+	imports  []string
+	remove   bool // Remove mode: remove generated statements instead of adding
+	test     bool
+	dryRun   bool
+	verbose  bool
 }
 
 // Option configures a Processor.
@@ -56,20 +56,19 @@ func WithVerbose(verbose bool) Option {
 	}
 }
 
-// WithMatchMode sets the detection mode for idempotency.
-func WithMatchMode(mode MatchMode) Option {
+// WithRemove enables remove mode (remove generated statements instead of adding).
+func WithRemove(remove bool) Option {
 	return func(p *Processor) {
-		p.matchMode = mode
+		p.remove = remove
 	}
 }
 
 // New creates a new Processor.
 func New(registry *config.CarrierRegistry, tmpl *template.Template, imports []string, opts ...Option) *Processor {
 	p := &Processor{
-		registry:  registry,
-		tmpl:      tmpl,
-		imports:   imports,
-		matchMode: MatchModeSkeleton, // Default to skeleton matching (no markers)
+		registry: registry,
+		tmpl:     tmpl,
+		imports:  imports,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -268,21 +267,24 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) bool {
 			return true
 		}
 
-		// Check existing statement and update if needed
-		action := p.detectAction(decl.Body, stmt, vars.FuncName)
-		useMarker := p.matchMode == MatchModeMarker
+		// Check existing statement and determine action
+		action := p.detectAction(decl.Body, stmt)
 
 		switch action.Type {
 		case ActionInsert:
-			if insertStatement(decl.Body, stmt, useMarker) {
+			if insertStatement(decl.Body, stmt) {
 				modified = true
 			}
 		case ActionUpdate:
-			if updateStatement(decl.Body, action.Index, stmt, useMarker) {
+			if updateStatement(decl.Body, action.Index, stmt) {
+				modified = true
+			}
+		case ActionRemove:
+			if removeStatement(decl.Body, action.Index) {
 				modified = true
 			}
 		case ActionSkip:
-			// Already up to date
+			// Already up to date (or nothing to remove)
 		}
 
 		return true
@@ -369,58 +371,56 @@ const (
 	ActionSkip ActionType = iota
 	ActionInsert
 	ActionUpdate
+	ActionRemove
 )
 
 // Action represents the action to take and related info.
 type Action struct {
 	Type  ActionType
-	Index int // For ActionUpdate, the index of the statement to update
+	Index int // For ActionUpdate/ActionRemove, the index of the statement
 }
 
-func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string, expectedFuncName string) Action {
+// detectAction determines what action to take for a function body.
+// Uses skeleton matching to compare AST structure.
+func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) Action {
 	// Parse the rendered statement for skeleton comparison
-	var targetStmt dst.Stmt
-	if p.matchMode == MatchModeSkeleton {
-		var err error
-		targetStmt, err = parseStatement(renderedStmt)
-		if err != nil {
-			// If we can't parse the rendered statement, fall back to insert
-			return Action{Type: ActionInsert}
+	targetStmt, err := parseStatement(renderedStmt)
+	if err != nil {
+		// If we can't parse the rendered statement, fall back to insert (or skip for remove)
+		if p.remove {
+			return Action{Type: ActionSkip}
+		}
+		return Action{Type: ActionInsert}
+	}
+
+	// Format the target statement for consistent comparison
+	// This ensures unformatted templates match formatted existing code
+	targetStr := stmtToString(targetStmt)
+
+	for i, stmt := range body.List {
+		// Compare AST structure (works for any statement type)
+		if matchesSkeleton(targetStmt, stmt) {
+			// Check if statement has skip directive (manually added, should not be touched)
+			if hasStmtSkipDirective(stmt) {
+				return Action{Type: ActionSkip, Index: i}
+			}
+			if p.remove {
+				// In remove mode, remove the matching statement
+				return Action{Type: ActionRemove, Index: i}
+			}
+			// Check if the formatted output matches exactly
+			existingStr := stmtToString(stmt)
+			if existingStr == targetStr {
+				return Action{Type: ActionSkip, Index: i}
+			}
+			// Structure matches but content differs - needs update
+			return Action{Type: ActionUpdate, Index: i}
 		}
 	}
 
-	for i, stmt := range body.List {
-		switch p.matchMode {
-		case MatchModeSkeleton:
-			// Compare AST structure (works for any statement type)
-			if matchesSkeleton(targetStmt, stmt) {
-				// Check if the rendered output matches exactly
-				existingStr := stmtToString(stmt)
-				if existingStr == renderedStmt {
-					return Action{Type: ActionSkip, Index: i}
-				}
-				// Structure matches but content differs - needs update
-				return Action{Type: ActionUpdate, Index: i}
-			}
-
-		case MatchModeMarker:
-			// Marker-based detection
-			if hasGeneratedMarker(stmt) {
-				if isMatchingStatement(stmt, expectedFuncName) {
-					return Action{Type: ActionSkip, Index: i}
-				}
-				return Action{Type: ActionUpdate, Index: i}
-			}
-
-		case MatchModePattern:
-			// Legacy pattern-based detection (defer XXX.StartSegment(...).End() only)
-			if isMatchingStatement(stmt, expectedFuncName) {
-				return Action{Type: ActionSkip, Index: i}
-			}
-			if isMatchingStatementPattern(stmt) {
-				return Action{Type: ActionUpdate, Index: i}
-			}
-		}
+	// No matching statement found
+	if p.remove {
+		return Action{Type: ActionSkip} // Nothing to remove
 	}
 	return Action{Type: ActionInsert}
 }
@@ -474,6 +474,25 @@ func isMajorVersionSuffix(s string) bool {
 func hasSkipDirective(decs *dst.NodeDecs) bool {
 	for _, c := range decs.Start.All() {
 		if strings.Contains(c, "ctxweaver:skip") || strings.Contains(c, "DO NOT EDIT") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasStmtSkipDirective checks if a statement has a skip directive comment.
+// This handles both "//ctxweaver:skip" and "// ctxweaver:skip" variants.
+func hasStmtSkipDirective(stmt dst.Stmt) bool {
+	decs := stmt.Decorations()
+	// Check Start decorations (comments before the statement on the same line group)
+	for _, c := range decs.Start.All() {
+		if strings.Contains(c, "ctxweaver:skip") {
+			return true
+		}
+	}
+	// Check End decorations (trailing comments on the same line)
+	for _, c := range decs.End.All() {
+		if strings.Contains(c, "ctxweaver:skip") {
 			return true
 		}
 	}
@@ -587,21 +606,24 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool
 			return true
 		}
 
-		// Check existing statement and update if needed
-		action := p.detectAction(decl.Body, stmt, vars.FuncName)
-		useMarker := p.matchMode == MatchModeMarker
+		// Check existing statement and determine action
+		action := p.detectAction(decl.Body, stmt)
 
 		switch action.Type {
 		case ActionInsert:
-			if insertStatement(decl.Body, stmt, useMarker) {
+			if insertStatement(decl.Body, stmt) {
 				modified = true
 			}
 		case ActionUpdate:
-			if updateStatement(decl.Body, action.Index, stmt, useMarker) {
+			if updateStatement(decl.Body, action.Index, stmt) {
+				modified = true
+			}
+		case ActionRemove:
+			if removeStatement(decl.Body, action.Index) {
 				modified = true
 			}
 		case ActionSkip:
-			// Already up to date
+			// Already up to date (or nothing to remove)
 		}
 
 		return true

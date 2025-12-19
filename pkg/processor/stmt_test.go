@@ -46,116 +46,6 @@ func TestParseStatement(t *testing.T) {
 	}
 }
 
-func TestIsMatchingStatementPattern(t *testing.T) {
-	tests := map[string]struct {
-		code string
-		want bool
-	}{
-		"matching defer": {
-			code: `defer apm.StartSegment(ctx, "pkg.Func").End()`,
-			want: true,
-		},
-		"different func name": {
-			code: `defer apm.StartSegment(ctx, "other.Func").End()`,
-			want: true,
-		},
-		"not a defer": {
-			code: `apm.StartSegment(ctx, "pkg.Func").End()`,
-			want: false,
-		},
-		"different method": {
-			code: `defer apm.StartSpan(ctx, "pkg.Func").End()`,
-			want: false,
-		},
-		"no End call": {
-			code: `defer apm.StartSegment(ctx, "pkg.Func")`,
-			want: false,
-		},
-		"simple defer": {
-			code: `defer close()`,
-			want: false,
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			stmt := mustParseStmt(t, tt.code)
-			got := isMatchingStatementPattern(stmt)
-			if got != tt.want {
-				t.Errorf("isMatchingStatementPattern() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestIsMatchingStatement(t *testing.T) {
-	tests := map[string]struct {
-		code     string
-		funcName string
-		want     bool
-	}{
-		"exact match": {
-			code:     `defer apm.StartSegment(ctx, "pkg.Func").End()`,
-			funcName: "pkg.Func",
-			want:     true,
-		},
-		"different func name": {
-			code:     `defer apm.StartSegment(ctx, "other.Func").End()`,
-			funcName: "pkg.Func",
-			want:     false,
-		},
-		"method name match": {
-			code:     `defer apm.StartSegment(ctx, "pkg.(*Service).Method").End()`,
-			funcName: "pkg.(*Service).Method",
-			want:     true,
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			stmt := mustParseStmt(t, tt.code)
-			got := isMatchingStatement(stmt, tt.funcName)
-			if got != tt.want {
-				t.Errorf("isMatchingStatement() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestExtractFuncNameFromDefer(t *testing.T) {
-	tests := map[string]struct {
-		code string
-		want string
-	}{
-		"simple func": {
-			code: `defer apm.StartSegment(ctx, "pkg.Func").End()`,
-			want: "pkg.Func",
-		},
-		"pointer receiver method": {
-			code: `defer apm.StartSegment(ctx, "pkg.(*Service).Method").End()`,
-			want: "pkg.(*Service).Method",
-		},
-		"value receiver method": {
-			code: `defer apm.StartSegment(ctx, "pkg.Service.Method").End()`,
-			want: "pkg.Service.Method",
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			stmt := mustParseStmt(t, tt.code)
-			def, ok := stmt.(*dst.DeferStmt)
-			if !ok {
-				t.Fatal("not a defer statement")
-			}
-			got := extractFuncNameFromDefer(def)
-			if got != tt.want {
-				t.Errorf("extractFuncNameFromDefer() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestInsertStatement(t *testing.T) {
 	body := &dst.BlockStmt{
 		List: []dst.Stmt{
@@ -164,7 +54,7 @@ func TestInsertStatement(t *testing.T) {
 	}
 
 	stmt := `defer trace(ctx)`
-	if !insertStatement(body, stmt, false) {
+	if !insertStatement(body, stmt) {
 		t.Error("insertStatement() returned false")
 	}
 
@@ -191,19 +81,79 @@ func TestUpdateStatement(t *testing.T) {
 	}
 
 	stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-	if !updateStatement(body, 0, stmt, false) {
+	if !updateStatement(body, 0, stmt) {
 		t.Error("updateStatement() returned false")
 	}
 
-	// Verify the statement was updated
+	if len(body.List) != 2 {
+		t.Errorf("body.List length = %d, want 2", len(body.List))
+	}
+
+	// First statement should be updated
 	def, ok := body.List[0].(*dst.DeferStmt)
 	if !ok {
 		t.Fatal("first statement is not a defer")
 	}
+	if def == nil {
+		t.Fatal("first statement is nil")
+	}
+}
 
-	funcName := extractFuncNameFromDefer(def)
-	if funcName != "new.Func" {
-		t.Errorf("updated func name = %q, want %q", funcName, "new.Func")
+func TestRemoveStatement(t *testing.T) {
+	tests := map[string]struct {
+		initialLen int
+		removeIdx  int
+		wantLen    int
+		wantResult bool
+	}{
+		"remove first": {
+			initialLen: 3,
+			removeIdx:  0,
+			wantLen:    2,
+			wantResult: true,
+		},
+		"remove middle": {
+			initialLen: 3,
+			removeIdx:  1,
+			wantLen:    2,
+			wantResult: true,
+		},
+		"remove last": {
+			initialLen: 3,
+			removeIdx:  2,
+			wantLen:    2,
+			wantResult: true,
+		},
+		"invalid index negative": {
+			initialLen: 3,
+			removeIdx:  -1,
+			wantLen:    3,
+			wantResult: false,
+		},
+		"invalid index too large": {
+			initialLen: 3,
+			removeIdx:  3,
+			wantLen:    3,
+			wantResult: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Create body with n statements
+			body := &dst.BlockStmt{List: make([]dst.Stmt, tt.initialLen)}
+			for i := range body.List {
+				body.List[i] = &dst.ExprStmt{X: &dst.Ident{Name: "stmt"}}
+			}
+
+			got := removeStatement(body, tt.removeIdx)
+			if got != tt.wantResult {
+				t.Errorf("removeStatement() = %v, want %v", got, tt.wantResult)
+			}
+			if len(body.List) != tt.wantLen {
+				t.Errorf("body.List length = %d, want %d", len(body.List), tt.wantLen)
+			}
+		})
 	}
 }
 

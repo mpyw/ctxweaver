@@ -6,23 +6,6 @@ import (
 	"github.com/dave/dst"
 )
 
-// MatchMode determines how statements are matched for idempotency.
-type MatchMode int
-
-const (
-	// MatchModeMarker uses //ctxweaver:generated marker for detection.
-	// Most reliable but adds comments to code.
-	MatchModeMarker MatchMode = iota
-
-	// MatchModeSkeleton compares AST structure (node types and static identifiers).
-	// Works for any statement type without markers.
-	MatchModeSkeleton
-
-	// MatchModePattern uses hardcoded pattern detection (legacy).
-	// Only works for defer XXX.StartSegment(...).End() pattern.
-	MatchModePattern
-)
-
 // matchesSkeleton compares two statements by their AST structure.
 // It returns true if both statements have the same "skeleton" - same node types
 // and static identifiers, but potentially different dynamic values (variables, literals).
