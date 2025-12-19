@@ -404,12 +404,7 @@ func readTestdataFile(t *testing.T, subdir, filename string) []byte {
 	path := filepath.Join("..", "..", "internal", "testdata", "idempotency", subdir, filename)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// Fallback to golden testdata
-		path = filepath.Join("..", "..", "internal", "testdata", subdir, filename)
-		data, err = os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("failed to read %s: %v", path, err)
-		}
+		t.Fatalf("failed to read %s: %v", path, err)
 	}
 	return data
 }

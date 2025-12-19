@@ -2,20 +2,111 @@ package test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
-func Foo(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("test.Foo").End()
+// Foo is a complex function with various control flows.
+// It demonstrates handling of nested structures and comments.
+func Foo(ctx context.Context, input string) (result string, err error) {
+	// ==================================================
+	// ctxweaver: auto-generated tracing code
+	// DO NOT EDIT - this block is managed by ctxweaver
+	// ==================================================
+	/*
+	 * Function: "test.Foo"
+	 * Context:  ctx
+	 */
+	if /* nil check */ txn := newrelic.FromContext(
+		// Extract transaction from context
+		ctx, // <- context variable
+	); txn != nil /* ensure transaction exists */ {
+		// Register cleanup via defer
+		defer /* start segment */ txn.StartSegment(
+			// Function name for tracing
+			"test.Foo", // <- function identifier
+		).End() // <- end segment on function exit
+	}
+	// ==================================================
+	// End of ctxweaver generated code
+	// ==================================================
 
-	if true {
-		for i := 0; i < 10; i++ {
-			switch i {
-			case 1:
-				break
+	// Early return with inline comment
+	if input == "" {
+		return "", errors.New("empty input")
+	}
+
+	// Early return with newline
+	if ctx == nil {
+		return "", errors.New("nil context")
+	}
+
+	/*
+	 * Block comment before complex logic
+	 * This should be preserved
+	 */
+	for i := 0; i < 10; i++ {
+		// Loop iteration comment
+		switch i {
+		case 0:
+			// First case
+			fmt.Println("zero")
+		case 1, 2, 3: // Multiple values
+			fmt.Println("small")
+		default:
+			// Default case with nested if
+			if i > 5 {
+				fmt.Println("large") // Inline comment
 			}
 		}
 	}
+
+	// Nested conditionals
+	if input == "special" {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		} // Inline early return
+
+		// Another block comment
+		result = "handled"
+	} else {
+		result = input
+	}
+
+	// Final return
+	return result, nil
+}
+
+// Bar is another function to test multiple function handling.
+func Bar(ctx context.Context) error {
+	// ==================================================
+	// ctxweaver: auto-generated tracing code
+	// DO NOT EDIT - this block is managed by ctxweaver
+	// ==================================================
+	/*
+	 * Function: "test.Bar"
+	 * Context:  ctx
+	 */
+	if /* nil check */ txn := newrelic.FromContext(
+		// Extract transaction from context
+		ctx, // <- context variable
+	); txn != nil /* ensure transaction exists */ {
+		// Register cleanup via defer
+		defer /* start segment */ txn.StartSegment(
+			// Function name for tracing
+			"test.Bar", // <- function identifier
+		).End() // <- end segment on function exit
+	}
+	// ==================================================
+	// End of ctxweaver generated code
+	// ==================================================
+
+	// Simple early return
+	if ctx == nil {
+		return errors.New("nil")
+	}
+
 	return nil
 }

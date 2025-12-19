@@ -192,15 +192,28 @@ func parseStatement(stmtStr string) (dst.Stmt, error) {
 		return nil, nil
 	}
 
-	// Handle multi-line statements (multiple statements)
-	if len(funcDecl.Body.List) == 1 {
+	// Get the last statement (or only statement)
+	lastIdx := len(funcDecl.Body.List) - 1
+	stmt := funcDecl.Body.List[lastIdx]
+
+	// Trailing comments after the last statement end up in the function body's
+	// End decoration (before the closing brace). We need to capture these and
+	// attach them to the statement so they're preserved during insertion/update.
+	if endComments := funcDecl.Body.Decs.End; len(endComments) > 0 {
+		for _, c := range endComments {
+			stmt.Decorations().End.Append(c)
+		}
+	}
+
+	// For multi-line templates with multiple statements, we only return the first.
+	// The trailing comments have already been attached to the last statement above,
+	// but if there are multiple statements, we still only support the first.
+	// TODO: Support multi-statement insertion
+	if len(funcDecl.Body.List) > 1 {
 		return funcDecl.Body.List[0], nil
 	}
 
-	// For multi-line templates, we need to handle multiple statements
-	// Return a block statement isn't valid here, so we just take the first
-	// TODO: Support multi-statement insertion
-	return funcDecl.Body.List[0], nil
+	return stmt, nil
 }
 
 // stmtToString converts a DST statement back to a string.
