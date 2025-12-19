@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/processor"
@@ -104,17 +103,5 @@ func run() error {
 		}
 	}
 
-	return nil
-}
-
-// stringSliceFlag implements flag.Value for a slice of strings.
-type stringSliceFlag []string
-
-func (s *stringSliceFlag) String() string {
-	return strings.Join(*s, ",")
-}
-
-func (s *stringSliceFlag) Set(value string) error {
-	*s = append(*s, value)
 	return nil
 }

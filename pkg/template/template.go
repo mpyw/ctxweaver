@@ -42,12 +42,8 @@ type Template struct {
 // funcs returns the template function map.
 func funcs() template.FuncMap {
 	return template.FuncMap{
-		"quote": func(s string) string {
-			return strconv.Quote(s)
-		},
-		"backtick": func(s string) string {
-			return "`" + s + "`"
-		},
+		"quote":    strconv.Quote,
+		"backtick": func(s string) string { return "`" + s + "`" },
 	}
 }
 

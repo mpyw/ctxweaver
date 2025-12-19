@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"go/token"
 	"reflect"
 
 	"github.com/dave/dst"
@@ -286,79 +285,4 @@ func isDynamicIdent(name string) bool {
 	}
 
 	return dynamicNames[name]
-}
-
-// extractStaticPattern extracts static identifiers from a statement for debugging.
-func extractStaticPattern(stmt dst.Stmt) []string {
-	var pattern []string
-	extractPattern(stmt, &pattern)
-	return pattern
-}
-
-func extractPattern(node dst.Node, pattern *[]string) {
-	if node == nil {
-		return
-	}
-
-	switch n := node.(type) {
-	case *dst.DeferStmt:
-		*pattern = append(*pattern, "defer")
-		extractPattern(n.Call, pattern)
-
-	case *dst.IfStmt:
-		*pattern = append(*pattern, "if")
-		extractPattern(n.Cond, pattern)
-		extractPattern(n.Body, pattern)
-		if n.Else != nil {
-			*pattern = append(*pattern, "else")
-			extractPattern(n.Else, pattern)
-		}
-
-	case *dst.SwitchStmt:
-		*pattern = append(*pattern, "switch")
-		extractPattern(n.Tag, pattern)
-		extractPattern(n.Body, pattern)
-
-	case *dst.BlockStmt:
-		*pattern = append(*pattern, "{")
-		for _, s := range n.List {
-			extractPattern(s, pattern)
-		}
-		*pattern = append(*pattern, "}")
-
-	case *dst.CallExpr:
-		extractPattern(n.Fun, pattern)
-		*pattern = append(*pattern, "(")
-		for _, arg := range n.Args {
-			extractPattern(arg, pattern)
-		}
-		*pattern = append(*pattern, ")")
-
-	case *dst.SelectorExpr:
-		extractPattern(n.X, pattern)
-		*pattern = append(*pattern, "."+n.Sel.Name)
-
-	case *dst.Ident:
-		if !isDynamicIdent(n.Name) {
-			*pattern = append(*pattern, n.Name)
-		} else {
-			*pattern = append(*pattern, "_")
-		}
-
-	case *dst.BasicLit:
-		switch n.Kind {
-		case token.STRING:
-			*pattern = append(*pattern, `"..."`)
-		case token.INT:
-			*pattern = append(*pattern, "INT")
-		case token.FLOAT:
-			*pattern = append(*pattern, "FLOAT")
-		default:
-			*pattern = append(*pattern, "LIT")
-		}
-
-	case *dst.FuncLit:
-		*pattern = append(*pattern, "func")
-		extractPattern(n.Body, pattern)
-	}
 }

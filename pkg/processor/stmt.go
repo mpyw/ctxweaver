@@ -239,8 +239,3 @@ func stmtToString(stmt dst.Stmt) string {
 
 	return strings.TrimSpace(buf.String())
 }
-
-// normalizeStatement normalizes whitespace in a statement string.
-func normalizeStatement(s string) string {
-	return strings.TrimSpace(s)
-}
