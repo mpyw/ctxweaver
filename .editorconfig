@@ -10,8 +10,3 @@ insert_final_newline = true
 
 [*.go]
 indent_style = tab
-
-# Disable formatting for raw test files (intentionally unformatted)
-[*.raw.go]
-trim_trailing_whitespace = false
-insert_final_newline = unset
