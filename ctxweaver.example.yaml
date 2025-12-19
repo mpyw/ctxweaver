@@ -2,6 +2,9 @@
 # Copy this file to ctxweaver.yaml and customize for your project.
 
 # Template for the statement to insert at the beginning of context-aware functions.
+#
+# TIP: For Go text/template syntax guide, see: https://docs.gomplate.ca/syntax/
+#
 # Supports Go text/template syntax with the following variables:
 #   - {{.Ctx}}               : Expression to access context.Context (e.g., "ctx", "c.Request().Context()")
 #   - {{.CtxVar}}            : The variable name of the context carrier (e.g., "ctx", "c")
