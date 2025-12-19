@@ -13,7 +13,6 @@ import (
 
 func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool, error) {
 	modified := false
-	aliases := resolveAliases(df.Imports)
 	var renderErr error
 
 	dst.Inspect(df, func(n dst.Node) bool {
@@ -39,7 +38,8 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool,
 		}
 
 		// Check if first param is a context carrier
-		carrier, varName, ok := p.matchCarrier(param, aliases)
+		// nil aliases: use dst.Ident.Path set by NewDecoratorFromPackage
+		carrier, varName, ok := p.matchCarrier(param, nil)
 		if !ok {
 			return true
 		}
@@ -89,6 +89,7 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool,
 
 func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) (bool, error) {
 	modified := false
+	// Use fuzzy alias resolution (no type info available)
 	aliases := resolveAliases(df.Imports)
 	var renderErr error
 
@@ -115,6 +116,7 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) (boo
 		}
 
 		// Check if first param is a context carrier
+		// Fallback to aliases when type info is not available
 		carrier, varName, ok := p.matchCarrier(param, aliases)
 		if !ok {
 			return true
@@ -187,7 +189,12 @@ func (p *Processor) matchCarrier(param *dst.Field, aliases map[string]string) (c
 		return config.CarrierDef{}, "", false
 	}
 
-	pkgPath := aliases[pkgIdent.Name]
+	// Prefer type-resolved path from decorator (set by NewDecoratorFromPackage)
+	// Fall back to fuzzy alias resolution when type info is not available
+	pkgPath := pkgIdent.Path
+	if pkgPath == "" && aliases != nil {
+		pkgPath = aliases[pkgIdent.Name]
+	}
 	typeName := sel.Sel.Name
 
 	carrier, found := p.registry.Lookup(pkgPath, typeName)

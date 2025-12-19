@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
-	"go/parser"
-	"go/token"
 	"os"
 	"strings"
 
@@ -88,26 +86,16 @@ func (p *Processor) shouldProcessFile(filename string) bool {
 }
 
 func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filename string) (bool, error) {
-	// Read original source
-	src, err := os.ReadFile(filename)
-	if err != nil {
-		return false, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	// Parse with fresh fset for DST conversion
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse file: %w", err)
-	}
-
 	// Skip generated files (files with "// Code generated" comment)
-	if ast.IsGenerated(f) {
+	if ast.IsGenerated(astFile) {
 		return false, nil
 	}
 
-	// Convert to DST
-	df, err := decorator.DecorateFile(fset, f)
+	// Create decorator from package (preserves type info for import path resolution)
+	dec := decorator.NewDecoratorFromPackage(pkg)
+
+	// Convert to DST (no re-parsing needed)
+	df, err := dec.DecorateFile(astFile)
 	if err != nil {
 		return false, fmt.Errorf("failed to decorate file: %w", err)
 	}
@@ -127,7 +115,7 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 	}
 
 	// Convert back to AST
-	fset, f, err = decorator.RestoreFile(df)
+	fset, f, err := decorator.RestoreFile(df)
 	if err != nil {
 		return false, fmt.Errorf("failed to restore file: %w", err)
 	}
