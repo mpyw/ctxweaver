@@ -44,7 +44,6 @@ func run() error {
 	flag.BoolVar(&dryRun, "dry-run", false, "print changes without writing files")
 	flag.BoolVar(&verbose, "verbose", false, "print processed files")
 	flag.BoolVar(&silent, "silent", false, "suppress all output except errors")
-	flag.BoolVar(&silent, "s", false, "suppress all output except errors (shorthand)")
 	flag.BoolVar(&test, "test", false, "process test files")
 	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
 	flag.Parse()
