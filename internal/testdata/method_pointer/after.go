@@ -6,6 +6,9 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
+type DB struct{}
+type User struct{}
+
 type UserService struct {
 	db *DB
 }

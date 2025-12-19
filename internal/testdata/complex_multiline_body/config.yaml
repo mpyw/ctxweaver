@@ -11,3 +11,6 @@ template: |
   // ==================================================
 imports:
   - github.com/newrelic/go-agent/v3/newrelic
+
+# DST reformats inline if statements, so remove test cannot restore original
+skip_remove: true

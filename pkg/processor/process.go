@@ -119,7 +119,7 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 	}
 
 	// Process functions
-	modified, err := p.processFunctions(df, pkg)
+	modified, err := p.processFunctions(df, pkg.PkgPath)
 	if err != nil {
 		return false, err
 	}

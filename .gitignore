@@ -30,3 +30,6 @@ Thumbs.db
 
 # Build
 /dist/
+
+# Local notes
+TODO.md

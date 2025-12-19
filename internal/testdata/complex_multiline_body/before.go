@@ -9,6 +9,7 @@ import (
 // Foo is a complex function with various control flows.
 // It demonstrates handling of nested structures and comments.
 func Foo(ctx context.Context, input string) (result string, err error) {
+
 	// Early return with inline comment
 	if input == "" { return "", errors.New("empty input") }
 
@@ -53,6 +54,7 @@ func Foo(ctx context.Context, input string) (result string, err error) {
 
 // Bar is another function to test multiple function handling.
 func Bar(ctx context.Context) error {
+
 	// Simple early return
 	if ctx == nil { return errors.New("nil") }
 

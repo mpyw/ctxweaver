@@ -38,8 +38,6 @@ func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (acti
 		return action{}, fmt.Errorf("rendered statement is empty")
 	}
 
-	// Format the target statements for consistent comparison
-	targetStrs := dstutil.StmtsToStrings(targetStmts)
 	stmtCount := len(targetStmts)
 
 	for i := range body.List {
@@ -57,8 +55,8 @@ func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (acti
 				allMatch = false
 				break
 			}
-			// Check if exact match
-			if dstutil.StmtToString(existingStmt) != targetStrs[j] {
+			// Check if exact match (use skeleton match with exact mode)
+			if !dstutil.MatchesExact(targetStmt, existingStmt) {
 				allExact = false
 			}
 		}
