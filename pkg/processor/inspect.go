@@ -55,7 +55,11 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool,
 		}
 
 		// Check existing statement and determine action
-		action := p.detectAction(decl.Body, stmt)
+		action, err := p.detectAction(decl.Body, stmt)
+		if err != nil {
+			renderErr = fmt.Errorf("function %s: %w", decl.Name.Name, err)
+			return false // Stop inspection
+		}
 
 		switch action.actionType {
 		case actionInsert:
@@ -127,7 +131,11 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) (boo
 		}
 
 		// Check existing statement and determine action
-		action := p.detectAction(decl.Body, stmt)
+		action, err := p.detectAction(decl.Body, stmt)
+		if err != nil {
+			renderErr = fmt.Errorf("function %s: %w", decl.Name.Name, err)
+			return false // Stop inspection
+		}
 
 		switch action.actionType {
 		case actionInsert:

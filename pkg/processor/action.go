@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"fmt"
+
 	"github.com/dave/dst"
 
 	"github.com/mpyw/ctxweaver/internal/dstutil"
@@ -25,15 +27,14 @@ type action struct {
 
 // detectAction determines what action to take for a function body.
 // Uses skeleton matching to compare AST structure. Supports multi-statement templates.
-func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) action {
+func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (action, error) {
 	// Parse the rendered statements for skeleton comparison
 	targetStmts, err := dstutil.ParseStatements(renderedStmt)
-	if err != nil || len(targetStmts) == 0 {
-		// If we can't parse the rendered statement, fall back to insert (or skip for remove)
-		if p.remove {
-			return action{actionType: actionSkip}
-		}
-		return action{actionType: actionInsert}
+	if err != nil {
+		return action{}, fmt.Errorf("failed to parse rendered statement: %w", err)
+	}
+	if len(targetStmts) == 0 {
+		return action{}, fmt.Errorf("rendered statement is empty")
 	}
 
 	// Format the target statements for consistent comparison
@@ -64,23 +65,23 @@ func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) actio
 		if allMatch {
 			// Check if first statement has skip directive (manually added, should not be touched)
 			if hasStmtSkipDirective(body.List[i]) {
-				return action{actionType: actionSkip, index: i, count: stmtCount}
+				return action{actionType: actionSkip, index: i, count: stmtCount}, nil
 			}
 			if p.remove {
 				// In remove mode, remove all matching statements
-				return action{actionType: actionRemove, index: i, count: stmtCount}
+				return action{actionType: actionRemove, index: i, count: stmtCount}, nil
 			}
 			if allExact {
-				return action{actionType: actionSkip, index: i, count: stmtCount}
+				return action{actionType: actionSkip, index: i, count: stmtCount}, nil
 			}
 			// Structure matches but content differs - needs update
-			return action{actionType: actionUpdate, index: i, count: stmtCount}
+			return action{actionType: actionUpdate, index: i, count: stmtCount}, nil
 		}
 	}
 
 	// No matching statement found
 	if p.remove {
-		return action{actionType: actionSkip} // Nothing to remove
+		return action{actionType: actionSkip}, nil // Nothing to remove
 	}
-	return action{actionType: actionInsert}
+	return action{actionType: actionInsert}, nil
 }
