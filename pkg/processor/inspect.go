@@ -6,6 +6,7 @@ import (
 	"github.com/dave/dst"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/mpyw/ctxweaver/internal/dstutil"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
@@ -58,15 +59,15 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool,
 
 		switch action.actionType {
 		case actionInsert:
-			if insertStatements(decl.Body, stmt) {
+			if dstutil.InsertStatements(decl.Body, stmt) {
 				modified = true
 			}
 		case actionUpdate:
-			if updateStatements(decl.Body, action.index, action.count, stmt) {
+			if dstutil.UpdateStatements(decl.Body, action.index, action.count, stmt) {
 				modified = true
 			}
 		case actionRemove:
-			if removeStatements(decl.Body, action.index, action.count) {
+			if dstutil.RemoveStatements(decl.Body, action.index, action.count) {
 				modified = true
 			}
 		case actionSkip:
@@ -130,15 +131,15 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) (boo
 
 		switch action.actionType {
 		case actionInsert:
-			if insertStatements(decl.Body, stmt) {
+			if dstutil.InsertStatements(decl.Body, stmt) {
 				modified = true
 			}
 		case actionUpdate:
-			if updateStatements(decl.Body, action.index, action.count, stmt) {
+			if dstutil.UpdateStatements(decl.Body, action.index, action.count, stmt) {
 				modified = true
 			}
 		case actionRemove:
-			if removeStatements(decl.Body, action.index, action.count) {
+			if dstutil.RemoveStatements(decl.Body, action.index, action.count) {
 				modified = true
 			}
 		case actionSkip:

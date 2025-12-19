@@ -1,4 +1,5 @@
-package processor
+// Package dstutil provides utilities for DST (Decorated Syntax Tree) manipulation.
+package dstutil
 
 import (
 	"reflect"
@@ -6,10 +7,10 @@ import (
 	"github.com/dave/dst"
 )
 
-// matchesSkeleton compares two statements by their AST structure.
+// MatchesSkeleton compares two statements by their AST structure.
 // It returns true if both statements have the same "skeleton" - same node types
 // and static identifiers, but potentially different dynamic values (variables, literals).
-func matchesSkeleton(a, b dst.Stmt) bool {
+func MatchesSkeleton(a, b dst.Stmt) bool {
 	return compareNodes(a, b)
 }
 

@@ -1,4 +1,4 @@
-package processor
+package dstutil
 
 import (
 	"go/ast"
@@ -11,9 +11,9 @@ import (
 	"github.com/dave/dst/decorator"
 )
 
-// insertStatements inserts statements at the beginning of a function body.
-func insertStatements(body *dst.BlockStmt, stmtStr string) bool {
-	stmts, err := parseStatements(stmtStr)
+// InsertStatements inserts statements at the beginning of a function body.
+func InsertStatements(body *dst.BlockStmt, stmtStr string) bool {
+	stmts, err := ParseStatements(stmtStr)
 	if err != nil || len(stmts) == 0 {
 		return false
 	}
@@ -25,14 +25,14 @@ func insertStatements(body *dst.BlockStmt, stmtStr string) bool {
 	return true
 }
 
-// updateStatements updates statements starting at the given index.
+// UpdateStatements updates statements starting at the given index.
 // It replaces `count` statements with the parsed statements from stmtStr.
-func updateStatements(body *dst.BlockStmt, index, count int, stmtStr string) bool {
+func UpdateStatements(body *dst.BlockStmt, index, count int, stmtStr string) bool {
 	if index < 0 || index >= len(body.List) || count <= 0 || index+count > len(body.List) {
 		return false
 	}
 
-	stmts, err := parseStatements(stmtStr)
+	stmts, err := ParseStatements(stmtStr)
 	if err != nil || len(stmts) == 0 {
 		return false
 	}
@@ -52,8 +52,8 @@ func updateStatements(body *dst.BlockStmt, index, count int, stmtStr string) boo
 	return true
 }
 
-// removeStatements removes `count` statements starting at the given index.
-func removeStatements(body *dst.BlockStmt, index, count int) bool {
+// RemoveStatements removes `count` statements starting at the given index.
+func RemoveStatements(body *dst.BlockStmt, index, count int) bool {
 	if index < 0 || index >= len(body.List) || count <= 0 || index+count > len(body.List) {
 		return false
 	}
@@ -62,9 +62,9 @@ func removeStatements(body *dst.BlockStmt, index, count int) bool {
 	return true
 }
 
-// parseStatements parses a statement string into DST statements.
+// ParseStatements parses a statement string into DST statements.
 // Supports multiple statements separated by newlines.
-func parseStatements(stmtStr string) ([]dst.Stmt, error) {
+func ParseStatements(stmtStr string) ([]dst.Stmt, error) {
 	// Wrap in a function to parse as statements
 	src := "package p\nfunc f() {\n" + stmtStr + "\n}"
 
@@ -100,18 +100,18 @@ func parseStatements(stmtStr string) ([]dst.Stmt, error) {
 	return stmts, nil
 }
 
-// stmtsToStrings converts DST statements to their string representations.
-func stmtsToStrings(stmts []dst.Stmt) []string {
+// StmtsToStrings converts DST statements to their string representations.
+func StmtsToStrings(stmts []dst.Stmt) []string {
 	result := make([]string, len(stmts))
 	for i, stmt := range stmts {
-		result[i] = stmtToString(stmt)
+		result[i] = StmtToString(stmt)
 	}
 	return result
 }
 
-// stmtToString converts a DST statement back to a string.
+// StmtToString converts a DST statement back to a string.
 // This is used for exact comparison in skeleton matching.
-func stmtToString(stmt dst.Stmt) string {
+func StmtToString(stmt dst.Stmt) string {
 	// Create a minimal file containing just this statement
 	df := &dst.File{
 		Name: dst.NewIdent("p"),

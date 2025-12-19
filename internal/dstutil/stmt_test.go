@@ -1,4 +1,4 @@
-package processor
+package dstutil
 
 import (
 	"go/parser"
@@ -46,16 +46,16 @@ defer seg.End()`,
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			stmts, err := parseStatements(tt.input)
+			stmts, err := ParseStatements(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseStatements() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseStatements() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantErr {
 				return
 			}
 			if len(stmts) != tt.wantCount {
-				t.Errorf("parseStatements() returned %d statements, want %d", len(stmts), tt.wantCount)
+				t.Errorf("ParseStatements() returned %d statements, want %d", len(stmts), tt.wantCount)
 			}
 		})
 	}
@@ -70,8 +70,8 @@ func TestInsertStatements(t *testing.T) {
 		}
 
 		stmt := `defer trace(ctx)`
-		if !insertStatements(body, stmt) {
-			t.Error("insertStatements() returned false")
+		if !InsertStatements(body, stmt) {
+			t.Error("InsertStatements() returned false")
 		}
 
 		if len(body.List) != 2 {
@@ -97,8 +97,8 @@ func TestInsertStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "test.Foo")
 defer span.End()`
-		if !insertStatements(body, stmt) {
-			t.Error("insertStatements() returned false")
+		if !InsertStatements(body, stmt) {
+			t.Error("InsertStatements() returned false")
 		}
 
 		if len(body.List) != 3 {
@@ -129,8 +129,8 @@ func TestUpdateStatements(t *testing.T) {
 		}
 
 		stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-		if !updateStatements(body, 0, 1, stmt) {
-			t.Error("updateStatements() returned false")
+		if !UpdateStatements(body, 0, 1, stmt) {
+			t.Error("UpdateStatements() returned false")
 		}
 
 		if len(body.List) != 2 {
@@ -158,8 +158,8 @@ func TestUpdateStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "new.Func")
 defer span.End()`
-		if !updateStatements(body, 0, 2, stmt) {
-			t.Error("updateStatements() returned false")
+		if !UpdateStatements(body, 0, 2, stmt) {
+			t.Error("UpdateStatements() returned false")
 		}
 
 		if len(body.List) != 3 {
@@ -190,8 +190,8 @@ defer span.End()`
 		}
 
 		stmt := `x := 100`
-		if !updateStatements(body, 0, 3, stmt) {
-			t.Error("updateStatements() returned false")
+		if !UpdateStatements(body, 0, 3, stmt) {
+			t.Error("UpdateStatements() returned false")
 		}
 
 		if len(body.List) != 2 {
@@ -281,9 +281,9 @@ func TestRemoveStatements(t *testing.T) {
 				body.List[i] = &dst.ExprStmt{X: &dst.Ident{Name: "stmt"}}
 			}
 
-			got := removeStatements(body, tt.removeIdx, tt.removeCount)
+			got := RemoveStatements(body, tt.removeIdx, tt.removeCount)
 			if got != tt.wantResult {
-				t.Errorf("removeStatements() = %v, want %v", got, tt.wantResult)
+				t.Errorf("RemoveStatements() = %v, want %v", got, tt.wantResult)
 			}
 			if len(body.List) != tt.wantLen {
 				t.Errorf("body.List length = %d, want %d", len(body.List), tt.wantLen)
@@ -298,17 +298,17 @@ func TestStmtsToStrings(t *testing.T) {
 		mustParseStmt(t, `defer foo()`),
 	}
 
-	result := stmtsToStrings(stmts)
+	result := StmtsToStrings(stmts)
 
 	if len(result) != 2 {
-		t.Fatalf("stmtsToStrings() returned %d strings, want 2", len(result))
+		t.Fatalf("StmtsToStrings() returned %d strings, want 2", len(result))
 	}
 
 	if result[0] != "x := 1" {
-		t.Errorf("stmtsToStrings()[0] = %q, want %q", result[0], "x := 1")
+		t.Errorf("StmtsToStrings()[0] = %q, want %q", result[0], "x := 1")
 	}
 	if result[1] != "defer foo()" {
-		t.Errorf("stmtsToStrings()[1] = %q, want %q", result[1], "defer foo()")
+		t.Errorf("StmtsToStrings()[1] = %q, want %q", result[1], "defer foo()")
 	}
 }
 
