@@ -2,39 +2,76 @@
 # Copy this file to ctxweaver.yaml and customize for your project
 
 # Template for the statement to insert at the beginning of context-aware functions.
+#
 # Available variables:
-#   {{.Ctx}}              - Expression to access context.Context (e.g., "ctx", "c.Request().Context()")
-#   {{.CtxVar}}           - Name of the context parameter variable (e.g., "ctx", "c")
-#   {{.FuncName}}         - Fully qualified function name (e.g., "(*pkg.Service).Method")
-#   {{.PackageName}}      - Package name (e.g., "service")
-#   {{.PackagePath}}      - Full import path (e.g., "github.com/example/myapp/pkg/service")
-#   {{.FuncBaseName}}     - Function name without package/receiver (e.g., "Method")
-#   {{.ReceiverType}}     - Receiver type name (empty if not a method)
-#   {{.ReceiverVar}}      - Receiver variable name (empty if not a method)
-#   {{.IsMethod}}         - Whether this is a method (bool)
+#   {{.Ctx}}               - Expression to access context.Context (e.g., "ctx", "c.Request().Context()")
+#   {{.CtxVar}}            - Name of the context parameter variable (e.g., "ctx", "c")
+#   {{.FuncName}}          - Fully qualified function name (e.g., "service.(*UserService).GetByID")
+#   {{.PackageName}}       - Package name (e.g., "service")
+#   {{.PackagePath}}       - Full import path (e.g., "github.com/example/myapp/pkg/service")
+#   {{.FuncBaseName}}      - Function name without package/receiver (e.g., "GetByID")
+#   {{.ReceiverType}}      - Receiver type name (empty if not a method)
+#   {{.ReceiverVar}}       - Receiver variable name (empty if not a method)
+#   {{.IsMethod}}          - Whether this is a method (bool)
 #   {{.IsPointerReceiver}} - Whether the receiver is a pointer (bool)
 #
 # Built-in functions:
 #   {{.FuncName | quote}}    - Wrap in double quotes
 #   {{.FuncName | backtick}} - Wrap in backticks
+#
+# FuncName format examples:
+#   - Function:                  "service.CreateUser"
+#   - Method (pointer receiver): "service.(*UserService).GetByID"
+#   - Method (value receiver):   "service.UserService.String"
+
+# ------------------------------------------------------------------------------
+# Example 1: Simple - Using {{.FuncName}} (recommended)
+# ------------------------------------------------------------------------------
 template: |
-  defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+  defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()
 
-# Alternative: load template from a file
-# template_file: ./templates/apm.tmpl
-
-# Imports to add when the statement is inserted
 imports:
-  - github.com/example/myapp/internal/apm
+  - github.com/newrelic/go-agent/v3/newrelic
 
+# ------------------------------------------------------------------------------
+# Example 2: Custom function name format using template variables
+# ------------------------------------------------------------------------------
+# If you need a different naming format, you can build it yourself:
+#
+# template: |
+#   {{- $name := "" -}}
+#   {{- if .IsMethod -}}
+#     {{- if .IsPointerReceiver -}}
+#       {{- $name = printf "%s.(*%s).%s" .PackageName .ReceiverType .FuncBaseName -}}
+#     {{- else -}}
+#       {{- $name = printf "%s.%s.%s" .PackageName .ReceiverType .FuncBaseName -}}
+#     {{- end -}}
+#   {{- else -}}
+#     {{- $name = printf "%s.%s" .PackageName .FuncBaseName -}}
+#   {{- end -}}
+#   defer newrelic.FromContext({{.Ctx}}).StartSegment({{$name | quote}}).End()
+
+# ------------------------------------------------------------------------------
+# Example 3: OpenTelemetry style
+# ------------------------------------------------------------------------------
+# template: |
+#   {{.CtxVar}}, span := otel.Tracer({{.PackageName | quote}}).Start({{.Ctx}}, {{.FuncName | quote}})
+#   defer span.End()
+#
+# imports:
+#   - go.opentelemetry.io/otel
+
+# ------------------------------------------------------------------------------
 # Additional context carrier types (built-in carriers are always included)
+# ------------------------------------------------------------------------------
 # Built-in carriers:
-#   - context.Context (accessor: "")
-#   - github.com/labstack/echo/v4.Context (accessor: ".Request().Context()")
-#   - github.com/urfave/cli/v2.Context (accessor: ".Context")
-#   - github.com/spf13/cobra.Command (accessor: ".Context()")
-#   - github.com/gin-gonic/gin.Context (accessor: ".Request.Context()")
-#   - github.com/gofiber/fiber/v2.Ctx (accessor: ".Context()")
+#   - context.Context                      (accessor: "")
+#   - github.com/labstack/echo/v4.Context  (accessor: ".Request().Context()")
+#   - github.com/urfave/cli/v2.Context     (accessor: ".Context")
+#   - github.com/spf13/cobra.Command       (accessor: ".Context()")
+#   - github.com/gin-gonic/gin.Context     (accessor: ".Request.Context()")
+#   - github.com/gofiber/fiber/v2.Ctx      (accessor: ".Context()")
+#
 carriers:
   # Example: custom context wrapper
   # - package: github.com/example/myapp/pkg/web

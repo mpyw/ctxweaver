@@ -55,12 +55,12 @@ func TestTemplate_Render(t *testing.T) {
 			want:     `defer trace(c.Request().Context())`,
 		},
 		"with quoted func name": {
-			template: `defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()`,
+			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
 			vars: Vars{
 				Ctx:      "ctx",
-				FuncName: "(*pkg.Service).Method",
+				FuncName: "pkg.(*Service).Method",
 			},
-			want: `defer apm.StartSegment(ctx, "(*pkg.Service).Method").End()`,
+			want: `defer newrelic.FromContext(ctx).StartSegment("pkg.(*Service).Method").End()`,
 		},
 		"with backtick func name": {
 			template: `defer trace({{.Ctx}}, {{.FuncName | backtick}})`,
@@ -76,7 +76,7 @@ defer trace({{.Ctx}}, {{.FuncBaseName | quote}})`,
 			vars: Vars{
 				Ctx:          "ctx",
 				CtxVar:       "ctx",
-				FuncName:     "(*myapp.Service).Process",
+				FuncName:     "myapp.(*Service).Process",
 				PackageName:  "myapp",
 				PackagePath:  "github.com/example/myapp",
 				FuncBaseName: "Process",
@@ -84,7 +84,7 @@ defer trace({{.Ctx}}, {{.FuncBaseName | quote}})`,
 				ReceiverVar:  "s",
 				IsMethod:     true,
 			},
-			want: `// (*myapp.Service).Process in github.com/example/myapp
+			want: `// myapp.(*Service).Process in github.com/example/myapp
 defer trace(ctx, "Process")`,
 		},
 		"conditional method": {

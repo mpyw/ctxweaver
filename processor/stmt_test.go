@@ -105,8 +105,8 @@ func TestIsMatchingStatement(t *testing.T) {
 			want:     false,
 		},
 		"method name match": {
-			code:     `defer apm.StartSegment(ctx, "(*pkg.Service).Method").End()`,
-			funcName: "(*pkg.Service).Method",
+			code:     `defer apm.StartSegment(ctx, "pkg.(*Service).Method").End()`,
+			funcName: "pkg.(*Service).Method",
 			want:     true,
 		},
 	}
@@ -131,13 +131,13 @@ func TestExtractFuncNameFromDefer(t *testing.T) {
 			code: `defer apm.StartSegment(ctx, "pkg.Func").End()`,
 			want: "pkg.Func",
 		},
-		"method": {
-			code: `defer apm.StartSegment(ctx, "(*pkg.Service).Method").End()`,
-			want: "(*pkg.Service).Method",
+		"pointer receiver method": {
+			code: `defer apm.StartSegment(ctx, "pkg.(*Service).Method").End()`,
+			want: "pkg.(*Service).Method",
 		},
-		"value receiver": {
-			code: `defer apm.StartSegment(ctx, "(pkg.Service).Method").End()`,
-			want: "(pkg.Service).Method",
+		"value receiver method": {
+			code: `defer apm.StartSegment(ctx, "pkg.Service.Method").End()`,
+			want: "pkg.Service.Method",
 		},
 	}
 

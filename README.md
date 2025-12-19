@@ -29,7 +29,7 @@ func (s *Service) ProcessOrder(ctx context.Context, orderID string) error {
 
 // After: ctxweaver inserts your template at the top
 func (s *Service) ProcessOrder(ctx context.Context, orderID string) error {
-    defer apm.StartSegment(ctx, "(*myapp.Service).ProcessOrder").End()
+    defer newrelic.FromContext(ctx).StartSegment("myapp.(*Service).ProcessOrder").End()
 
     // business logic...
 }
@@ -72,10 +72,10 @@ ctxweaver uses a YAML configuration file. Create `ctxweaver.yaml` in your projec
 ```yaml
 # ctxweaver.yaml
 template: |
-  defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+  defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()
 
 imports:
-  - github.com/example/myapp/internal/apm
+  - github.com/newrelic/go-agent/v3/newrelic
 
 patterns:
   - ./...
@@ -127,6 +127,16 @@ ctxweaver -test ./...
 | `{{.IsMethod}}` | `bool` | Whether this is a method |
 | `{{.IsPointerReceiver}}` | `bool` | Whether the receiver is a pointer |
 
+### FuncName Format
+
+`{{.FuncName}}` provides a fully qualified function name in the following format:
+
+| Type | Format | Example |
+|------|--------|---------|
+| Function | `pkg.Func` | `service.CreateUser` |
+| Method (pointer receiver) | `pkg.(*Type).Method` | `service.(*UserService).GetByID` |
+| Method (value receiver) | `pkg.Type.Method` | `service.UserService.String` |
+
 ### Built-in Functions
 
 | Function | Description |
@@ -134,31 +144,52 @@ ctxweaver -test ./...
 | `quote` | Wraps string in double quotes |
 | `backtick` | Wraps string in backticks |
 
-### Examples
+### Basic Example
 
-**APM Tracing (New Relic style)**
+**New Relic**
 ```yaml
 template: |
-  defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+  defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()
 imports:
-  - github.com/example/myapp/internal/apm
+  - github.com/newrelic/go-agent/v3/newrelic
 ```
 
-**OpenTelemetry Spans**
+**OpenTelemetry**
 ```yaml
 template: |
-  {{.CtxVar}}, span := otel.Tracer("myapp").Start({{.Ctx}}, {{.FuncName | quote}}); defer span.End()
+  {{.CtxVar}}, span := otel.Tracer({{.PackageName | quote}}).Start({{.Ctx}}, {{.FuncName | quote}}); defer span.End()
 imports:
   - go.opentelemetry.io/otel
 ```
 
-**Multi-line Template (via file)**
+### Custom Function Name Format
+
+If you need a different naming format, you can build it yourself using template variables:
+
 ```yaml
-template_file: ./templates/otel.tmpl
+template: |
+  {{- $name := "" -}}
+  {{- if .IsMethod -}}
+    {{- if .IsPointerReceiver -}}
+      {{- $name = printf "%s.(*%s).%s" .PackageName .ReceiverType .FuncBaseName -}}
+    {{- else -}}
+      {{- $name = printf "%s.%s.%s" .PackageName .ReceiverType .FuncBaseName -}}
+    {{- end -}}
+  {{- else -}}
+    {{- $name = printf "%s.%s" .PackageName .FuncBaseName -}}
+  {{- end -}}
+  defer newrelic.FromContext({{.Ctx}}).StartSegment({{$name | quote}}).End()
 imports:
-  - go.opentelemetry.io/otel
-  - go.opentelemetry.io/otel/attribute
+  - github.com/newrelic/go-agent/v3/newrelic
 ```
+
+This gives you full control over the naming format. Available variables for building custom names:
+- `{{.PackageName}}` - Package name (e.g., `service`)
+- `{{.PackagePath}}` - Full import path (e.g., `github.com/example/myapp/pkg/service`)
+- `{{.ReceiverType}}` - Receiver type (e.g., `UserService`)
+- `{{.FuncBaseName}}` - Function/method name (e.g., `GetByID`)
+- `{{.IsMethod}}` - `true` if method, `false` if function
+- `{{.IsPointerReceiver}}` - `true` if pointer receiver
 
 ## Built-in Context Carriers
 
