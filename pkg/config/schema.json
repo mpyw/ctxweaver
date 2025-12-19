@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mpyw/ctxweaver/pkg/config/schema.json",
+  "title": "ctxweaver configuration",
+  "description": "Configuration file schema for ctxweaver",
+  "type": "object",
+  "properties": {
+    "template": {
+      "type": "string",
+      "description": "Go template for the statement to insert. Supports variables like {{.Ctx}}, {{.FuncName}}, etc."
+    },
+    "template_file": {
+      "type": "string",
+      "description": "Path to a file containing the template (alternative to template)"
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Import paths to add when the template is inserted"
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Package patterns to process (e.g., './...', './pkg/...'). Defaults to ['./...'] if not specified."
+    },
+    "test": {
+      "type": "boolean",
+      "description": "Whether to process test files (*_test.go)",
+      "default": false
+    },
+    "carriers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/carrier"
+      },
+      "description": "Custom context carrier definitions"
+    },
+    "hooks": {
+      "$ref": "#/$defs/hooks",
+      "description": "Shell commands to run before and after processing"
+    }
+  },
+  "oneOf": [
+    { "required": ["template"] },
+    { "required": ["template_file"] }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "carrier": {
+      "type": "object",
+      "properties": {
+        "package": {
+          "type": "string",
+          "description": "Import path of the package containing the type"
+        },
+        "type": {
+          "type": "string",
+          "description": "Name of the type"
+        },
+        "accessor": {
+          "type": "string",
+          "description": "Expression to extract context.Context from the type (e.g., '.Context()', '.Request.Context()')"
+        }
+      },
+      "required": ["package", "type"],
+      "additionalProperties": false
+    },
+    "hooks": {
+      "type": "object",
+      "properties": {
+        "pre": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Shell commands to run before processing"
+        },
+        "post": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Shell commands to run after processing"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

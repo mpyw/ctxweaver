@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -207,5 +208,151 @@ func TestCarrierRegistry_All(t *testing.T) {
 	}
 	if !found {
 		t.Error("context.Context not found in All()")
+	}
+}
+
+func TestLoadConfig_UnknownField(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+unknown_field: "should cause error"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for unknown field")
+	}
+	if !strings.Contains(err.Error(), "additional properties") {
+		t.Errorf("error should mention 'additional properties', got: %v", err)
+	}
+}
+
+func TestLoadConfig_InvalidCarrier_MissingPackage(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+carriers:
+  - type: Context
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for carrier missing package")
+	}
+	if !strings.Contains(err.Error(), "package") {
+		t.Errorf("error should mention 'package', got: %v", err)
+	}
+}
+
+func TestLoadConfig_InvalidCarrier_MissingType(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+carriers:
+  - package: github.com/example/pkg
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for carrier missing type")
+	}
+	if !strings.Contains(err.Error(), "type") {
+		t.Errorf("error should mention 'type', got: %v", err)
+	}
+}
+
+func TestLoadConfig_InvalidCarrier_UnknownField(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+carriers:
+  - package: github.com/example/pkg
+    type: Context
+    unknown: value
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for carrier with unknown field")
+	}
+}
+
+func TestLoadConfig_InvalidHooks_UnknownField(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+hooks:
+  pre:
+    - echo hello
+  unknown: value
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for hooks with unknown field")
+	}
+}
+
+func TestLoadConfig_WrongType(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: 123
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for wrong type")
+	}
+}
+
+func TestLoadConfig_WithHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+hooks:
+  pre:
+    - go mod tidy
+  post:
+    - gofmt -w .
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if len(cfg.Hooks.Pre) != 1 || cfg.Hooks.Pre[0] != "go mod tidy" {
+		t.Errorf("Hooks.Pre = %v, want [go mod tidy]", cfg.Hooks.Pre)
+	}
+	if len(cfg.Hooks.Post) != 1 || cfg.Hooks.Post[0] != "gofmt -w ." {
+		t.Errorf("Hooks.Post = %v, want [gofmt -w .]", cfg.Hooks.Post)
 	}
 }

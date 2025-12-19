@@ -2,21 +2,27 @@
 package config
 
 import (
+	"bytes"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
 //go:embed carriers.yaml
 var defaultCarriersYAML []byte
 
+//go:embed schema.json
+var schemaJSON []byte
+
 // CarrierDef defines a context carrier type.
 type CarrierDef struct {
-	Package  string `yaml:"package"`
-	Type     string `yaml:"type"`
-	Accessor string `yaml:"accessor"`
+	Package  string `yaml:"package" json:"package"`
+	Type     string `yaml:"type" json:"type"`
+	Accessor string `yaml:"accessor" json:"accessor,omitempty"`
 }
 
 // CarriersFile represents the structure of carriers.yaml.
@@ -27,27 +33,27 @@ type CarriersFile struct {
 // Hooks defines shell commands to run before and after processing.
 type Hooks struct {
 	// Pre are shell commands to run before processing
-	Pre []string `yaml:"pre"`
+	Pre []string `yaml:"pre" json:"pre,omitempty"`
 	// Post are shell commands to run after processing
-	Post []string `yaml:"post"`
+	Post []string `yaml:"post" json:"post,omitempty"`
 }
 
 // Config represents the user configuration file.
 type Config struct {
 	// Template is the Go template for the statement to insert
-	Template string `yaml:"template"`
+	Template string `yaml:"template" json:"template,omitempty"`
 	// TemplateFile is a path to a file containing the template (alternative to Template)
-	TemplateFile string `yaml:"template_file"`
+	TemplateFile string `yaml:"template_file" json:"template_file,omitempty"`
 	// Imports are the imports to add when the template is inserted
-	Imports []string `yaml:"imports"`
+	Imports []string `yaml:"imports" json:"imports,omitempty"`
 	// Carriers are additional context carrier definitions
-	Carriers []CarrierDef `yaml:"carriers"`
+	Carriers []CarrierDef `yaml:"carriers" json:"carriers,omitempty"`
 	// Patterns are the package patterns to process (e.g., "./...")
-	Patterns []string `yaml:"patterns"`
+	Patterns []string `yaml:"patterns" json:"patterns,omitempty"`
 	// Test indicates whether to process test files
-	Test bool `yaml:"test"`
+	Test bool `yaml:"test" json:"test,omitempty"`
 	// Hooks are shell commands to run before and after processing
-	Hooks Hooks `yaml:"hooks"`
+	Hooks Hooks `yaml:"hooks" json:"hooks,omitempty"`
 }
 
 // CarrierRegistry holds all registered carriers for quick lookup.
@@ -103,9 +109,29 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	// Parse YAML to generic interface for schema validation
+	var raw any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Convert to JSON-compatible format (YAML maps use map[string]any)
+	jsonCompatible := convertYAMLToJSON(raw)
+
+	// Validate against JSON Schema
+	if err := validateSchema(jsonCompatible); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Now unmarshal into struct
+	jsonBytes, err := json.Marshal(jsonCompatible)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert config: %w", err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(jsonBytes, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	// Load template from file if specified
@@ -118,6 +144,51 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// validateSchema validates data against the embedded JSON Schema.
+func validateSchema(data any) error {
+	schema, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaJSON))
+	if err != nil {
+		return fmt.Errorf("failed to parse schema: %w", err)
+	}
+
+	c := jsonschema.NewCompiler()
+	if err := c.AddResource("schema.json", schema); err != nil {
+		return fmt.Errorf("failed to add schema resource: %w", err)
+	}
+
+	sch, err := c.Compile("schema.json")
+	if err != nil {
+		return fmt.Errorf("failed to compile schema: %w", err)
+	}
+
+	if err := sch.Validate(data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// convertYAMLToJSON converts YAML-style maps to JSON-compatible maps.
+// YAML unmarshals to map[string]any but we need to ensure nested maps are also converted.
+func convertYAMLToJSON(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		m := make(map[string]any)
+		for k, val := range v {
+			m[k] = convertYAMLToJSON(val)
+		}
+		return m
+	case []any:
+		arr := make([]any, len(v))
+		for i, val := range v {
+			arr[i] = convertYAMLToJSON(val)
+		}
+		return arr
+	default:
+		return v
+	}
 }
 
 // BuildContextExpr builds the expression to access context.Context from a variable.
