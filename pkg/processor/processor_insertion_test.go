@@ -77,13 +77,14 @@ func TestTransformSource_Golden(t *testing.T) {
 			}
 		}
 
-		if hasBeforeGo && hasAfterGo {
+		switch {
+		case hasBeforeGo && hasAfterGo:
 			// Single test case with after.go
 			runGoldenTest(t, entry.Name(), testDir)
-		} else if hasBeforeGo {
+		case hasBeforeGo:
 			// Test without after.go - skip golden test (idempotency only)
 			continue
-		} else {
+		default:
 			// Nested test cases
 			for _, sub := range subEntries {
 				if !sub.IsDir() {
