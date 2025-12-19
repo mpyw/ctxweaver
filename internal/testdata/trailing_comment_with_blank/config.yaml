@@ -1,0 +1,5 @@
+template: |
+  defer trace({{.Ctx}})
+
+  // trailing comment after blank line
+imports: []

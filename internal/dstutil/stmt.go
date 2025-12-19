@@ -85,19 +85,7 @@ func ParseStatements(stmtStr string) ([]dst.Stmt, error) {
 		return nil, nil
 	}
 
-	stmts := funcDecl.Body.List
-
-	// Trailing comments after the last statement end up in the function body's
-	// End decoration (before the closing brace). We need to capture these and
-	// attach them to the last statement so they're preserved during insertion/update.
-	if endComments := funcDecl.Body.Decs.End; len(endComments) > 0 {
-		lastStmt := stmts[len(stmts)-1]
-		for _, c := range endComments {
-			lastStmt.Decorations().End.Append(c)
-		}
-	}
-
-	return stmts, nil
+	return funcDecl.Body.List, nil
 }
 
 // StmtsToStrings converts DST statements to their string representations.
