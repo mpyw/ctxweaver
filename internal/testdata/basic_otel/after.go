@@ -1,4 +1,4 @@
-package basic_otel
+package test
 
 import (
 	"context"
@@ -6,10 +6,9 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-func ProcessData(ctx context.Context, data string) error {
-	ctx, span := otel.Tracer("").Start(ctx, "basic_otel.ProcessData")
+func Foo(ctx context.Context) error {
+	ctx, span := otel.Tracer("").Start(ctx, "test.Foo")
 	defer span.End()
 
-	// business logic
 	return nil
 }

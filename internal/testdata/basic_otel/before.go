@@ -1,8 +1,7 @@
-package basic_otel
+package test
 
 import "context"
 
-func ProcessData(ctx context.Context, data string) error {
-	// business logic
+func Foo(ctx context.Context) error {
 	return nil
 }

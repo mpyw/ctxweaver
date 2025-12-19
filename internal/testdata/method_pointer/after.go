@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/newrelic/go-agent/v3/newrelic"
+	"go.opentelemetry.io/otel"
 )
 
 type UserService struct {
@@ -11,14 +11,16 @@ type UserService struct {
 }
 
 func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
-	defer newrelic.FromContext(ctx).StartSegment("service.(*UserService).GetByID").End()
+	ctx, span := otel.Tracer("").Start(ctx, "service.(*UserService).GetByID")
+	defer span.End()
 
 	// query user
 	return nil, nil
 }
 
 func (s *UserService) Create(ctx context.Context, user *User) error {
-	defer newrelic.FromContext(ctx).StartSegment("service.(*UserService).Create").End()
+	ctx, span := otel.Tracer("").Start(ctx, "service.(*UserService).Create")
+	defer span.End()
 
 	// create user
 	return nil

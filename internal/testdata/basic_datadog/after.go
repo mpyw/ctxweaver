@@ -1,4 +1,4 @@
-package basic_datadog
+package test
 
 import (
 	"context"
@@ -6,10 +6,9 @@ import (
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
-func ProcessData(ctx context.Context, data string) error {
-	span, ctx := tracer.StartSpanFromContext(ctx, "basic_datadog.ProcessData")
+func Foo(ctx context.Context) error {
+	span, ctx := tracer.StartSpanFromContext(ctx, "test.Foo")
 	defer span.Finish()
 
-	// business logic
 	return nil
 }

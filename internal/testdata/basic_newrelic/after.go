@@ -1,4 +1,4 @@
-package basic
+package test
 
 import (
 	"context"
@@ -6,9 +6,8 @@ import (
 	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
-func ProcessData(ctx context.Context, data string) error {
-	defer newrelic.FromContext(ctx).StartSegment("basic.ProcessData").End()
+func Foo(ctx context.Context) error {
+	defer newrelic.FromContext(ctx).StartSegment("test.Foo").End()
 
-	// business logic
 	return nil
 }

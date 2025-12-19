@@ -3,7 +3,7 @@ package handler
 import (
 	"context"
 
-	"github.com/newrelic/go-agent/v3/newrelic"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 type Handler struct {
@@ -11,14 +11,16 @@ type Handler struct {
 }
 
 func (h Handler) Handle(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("handler.Handler.Handle").End()
+	span, ctx := tracer.StartSpanFromContext(ctx, "handler.Handler.Handle")
+	defer span.Finish()
 
 	// handle request
 	return nil
 }
 
 func (h Handler) String(ctx context.Context) string {
-	defer newrelic.FromContext(ctx).StartSegment("handler.Handler.String").End()
+	span, ctx := tracer.StartSpanFromContext(ctx, "handler.Handler.String")
+	defer span.Finish()
 
 	return h.name
 }

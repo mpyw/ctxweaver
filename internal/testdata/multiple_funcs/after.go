@@ -7,19 +7,25 @@ import (
 )
 
 func First(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("multi.First").End()
+	txn := newrelic.FromContext(ctx)
+	seg := txn.StartSegment("multi.First")
+	defer seg.End()
 
 	return nil
 }
 
 func Second(ctx context.Context, value int) (int, error) {
-	defer newrelic.FromContext(ctx).StartSegment("multi.Second").End()
+	txn := newrelic.FromContext(ctx)
+	seg := txn.StartSegment("multi.Second")
+	defer seg.End()
 
 	return value * 2, nil
 }
 
 func Third(ctx context.Context, a, b string) string {
-	defer newrelic.FromContext(ctx).StartSegment("multi.Third").End()
+	txn := newrelic.FromContext(ctx)
+	seg := txn.StartSegment("multi.Third")
+	defer seg.End()
 
 	return a + b
 }

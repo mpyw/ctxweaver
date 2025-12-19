@@ -1,0 +1,6 @@
+template: |
+  txn := newrelic.FromContext({{.Ctx}})
+  seg := txn.StartSegment({{.FuncName | quote}})
+  defer seg.End()
+imports:
+  - github.com/newrelic/go-agent/v3/newrelic
