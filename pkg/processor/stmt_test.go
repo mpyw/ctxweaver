@@ -164,7 +164,7 @@ func TestInsertStatement(t *testing.T) {
 	}
 
 	stmt := `defer trace(ctx)`
-	if !insertStatement(body, stmt) {
+	if !insertStatement(body, stmt, false) {
 		t.Error("insertStatement() returned false")
 	}
 
@@ -191,7 +191,7 @@ func TestUpdateStatement(t *testing.T) {
 	}
 
 	stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-	if !updateStatement(body, 0, stmt) {
+	if !updateStatement(body, 0, stmt, false) {
 		t.Error("updateStatement() returned false")
 	}
 

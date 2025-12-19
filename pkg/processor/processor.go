@@ -15,6 +15,7 @@ import (
 	"github.com/dave/dst/decorator"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/imports"
 
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/template"
@@ -22,12 +23,13 @@ import (
 
 // Processor handles code transformation.
 type Processor struct {
-	registry *config.CarrierRegistry
-	tmpl     *template.Template
-	imports  []string
-	test     bool
-	dryRun   bool
-	verbose  bool
+	registry  *config.CarrierRegistry
+	tmpl      *template.Template
+	imports   []string
+	matchMode MatchMode
+	test      bool
+	dryRun    bool
+	verbose   bool
 }
 
 // Option configures a Processor.
@@ -54,12 +56,20 @@ func WithVerbose(verbose bool) Option {
 	}
 }
 
+// WithMatchMode sets the detection mode for idempotency.
+func WithMatchMode(mode MatchMode) Option {
+	return func(p *Processor) {
+		p.matchMode = mode
+	}
+}
+
 // New creates a new Processor.
 func New(registry *config.CarrierRegistry, tmpl *template.Template, imports []string, opts ...Option) *Processor {
 	p := &Processor{
-		registry: registry,
-		tmpl:     tmpl,
-		imports:  imports,
+		registry:  registry,
+		tmpl:      tmpl,
+		imports:   imports,
+		matchMode: MatchModeSkeleton, // Default to skeleton matching (no markers)
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -184,9 +194,22 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 		return false, fmt.Errorf("failed to format file: %w", err)
 	}
 
+	// Clean up unused imports using goimports
+	// This handles the case where template changes make old imports unused
+	result, err := imports.Process(filename, buf.Bytes(), &imports.Options{
+		Comments:   true,
+		TabIndent:  true,
+		TabWidth:   8,
+		FormatOnly: false, // Run full goimports (add missing + remove unused)
+	})
+	if err != nil {
+		// If goimports fails, use the formatted output without cleanup
+		result = buf.Bytes()
+	}
+
 	// Write if not dry run
 	if !p.dryRun {
-		if err := os.WriteFile(filename, buf.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(filename, result, 0o644); err != nil {
 			return false, fmt.Errorf("failed to write file: %w", err)
 		}
 	}
@@ -237,15 +260,16 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) bool {
 		}
 
 		// Check existing statement and update if needed
-		action := p.detectAction(decl.Body, vars.FuncName)
+		action := p.detectAction(decl.Body, stmt, vars.FuncName)
+		useMarker := p.matchMode == MatchModeMarker
 
 		switch action.Type {
 		case ActionInsert:
-			if insertStatement(decl.Body, stmt) {
+			if insertStatement(decl.Body, stmt, useMarker) {
 				modified = true
 			}
 		case ActionUpdate:
-			if updateStatement(decl.Body, action.Index, stmt) {
+			if updateStatement(decl.Body, action.Index, stmt, useMarker) {
 				modified = true
 			}
 		case ActionSkip:
@@ -344,25 +368,49 @@ type Action struct {
 	Index int // For ActionUpdate, the index of the statement to update
 }
 
-func (p *Processor) detectAction(body *dst.BlockStmt, expectedFuncName string) Action {
-	// Look for existing statement with marker or matching pattern
+func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string, expectedFuncName string) Action {
+	// Parse the rendered statement for skeleton comparison
+	var targetStmt dst.Stmt
+	if p.matchMode == MatchModeSkeleton {
+		var err error
+		targetStmt, err = parseStatement(renderedStmt)
+		if err != nil {
+			// If we can't parse the rendered statement, fall back to insert
+			return Action{Type: ActionInsert}
+		}
+	}
+
 	for i, stmt := range body.List {
-		// Check for ctxweaver:generated marker first (universal detection)
-		if hasGeneratedMarker(stmt) {
-			// If the statement already matches perfectly, skip
+		switch p.matchMode {
+		case MatchModeSkeleton:
+			// Compare AST structure (works for any statement type)
+			if matchesSkeleton(targetStmt, stmt) {
+				// Check if the rendered output matches exactly
+				existingStr := stmtToString(stmt)
+				if existingStr == renderedStmt {
+					return Action{Type: ActionSkip, Index: i}
+				}
+				// Structure matches but content differs - needs update
+				return Action{Type: ActionUpdate, Index: i}
+			}
+
+		case MatchModeMarker:
+			// Marker-based detection
+			if hasGeneratedMarker(stmt) {
+				if isMatchingStatement(stmt, expectedFuncName) {
+					return Action{Type: ActionSkip, Index: i}
+				}
+				return Action{Type: ActionUpdate, Index: i}
+			}
+
+		case MatchModePattern:
+			// Legacy pattern-based detection (defer XXX.StartSegment(...).End() only)
 			if isMatchingStatement(stmt, expectedFuncName) {
 				return Action{Type: ActionSkip, Index: i}
 			}
-			// Otherwise update the existing generated statement
-			return Action{Type: ActionUpdate, Index: i}
-		}
-		// Fall back to pattern-based detection for backward compatibility
-		if isMatchingStatement(stmt, expectedFuncName) {
-			return Action{Type: ActionSkip, Index: i}
-		}
-		if isMatchingStatementPattern(stmt) {
-			// Pattern matches but func name differs - needs update
-			return Action{Type: ActionUpdate, Index: i}
+			if isMatchingStatementPattern(stmt) {
+				return Action{Type: ActionUpdate, Index: i}
+			}
 		}
 	}
 	return Action{Type: ActionInsert}
@@ -467,7 +515,20 @@ func (p *Processor) TransformSource(src []byte, pkgName string) ([]byte, error) 
 		return nil, fmt.Errorf("failed to format file: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	// Clean up unused imports using goimports
+	// This handles the case where template changes make old imports unused
+	result, err := imports.Process("test.go", buf.Bytes(), &imports.Options{
+		Comments:   true,
+		TabIndent:  true,
+		TabWidth:   8,
+		FormatOnly: false, // Run full goimports (add missing + remove unused)
+	})
+	if err != nil {
+		// If goimports fails, return the formatted output without cleanup
+		return buf.Bytes(), nil
+	}
+
+	return result, nil
 }
 
 func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool {
@@ -513,15 +574,16 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool
 		}
 
 		// Check existing statement and update if needed
-		action := p.detectAction(decl.Body, vars.FuncName)
+		action := p.detectAction(decl.Body, stmt, vars.FuncName)
+		useMarker := p.matchMode == MatchModeMarker
 
 		switch action.Type {
 		case ActionInsert:
-			if insertStatement(decl.Body, stmt) {
+			if insertStatement(decl.Body, stmt, useMarker) {
 				modified = true
 			}
 		case ActionUpdate:
-			if updateStatement(decl.Body, action.Index, stmt) {
+			if updateStatement(decl.Body, action.Index, stmt, useMarker) {
 				modified = true
 			}
 		case ActionSkip:

@@ -6,7 +6,7 @@ import (
 )
 
 func GetUser(c echo.Context) error {
-	defer newrelic.FromContext(c.Request().Context()).StartSegment("api.GetUser").End() //ctxweaver:generated
+	defer newrelic.FromContext(c.Request().Context()).StartSegment("api.GetUser").End()
 
 	id := c.Param("id")
 	_ = id
@@ -14,7 +14,7 @@ func GetUser(c echo.Context) error {
 }
 
 func CreateUser(c echo.Context) error {
-	defer newrelic.FromContext(c.Request().Context()).StartSegment("api.CreateUser").End() //ctxweaver:generated
+	defer newrelic.FromContext(c.Request().Context()).StartSegment("api.CreateUser").End()
 
 	// create user
 	return nil

@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"strconv"
@@ -123,15 +125,17 @@ func extractFuncNameFromDefer(def *dst.DeferStmt) string {
 }
 
 // insertStatement inserts a statement at the beginning of a function body.
-// The statement is marked with GeneratedMarker for idempotency.
-func insertStatement(body *dst.BlockStmt, stmtStr string) bool {
+// If useMarker is true, the statement is marked with GeneratedMarker for idempotency.
+func insertStatement(body *dst.BlockStmt, stmtStr string, useMarker bool) bool {
 	stmt, err := parseStatement(stmtStr)
 	if err != nil {
 		return false
 	}
 
-	// Add the generated marker as an end-of-line comment
-	stmt.Decorations().End.Append(GeneratedMarker)
+	// Optionally add the generated marker as an end-of-line comment
+	if useMarker {
+		stmt.Decorations().End.Append(GeneratedMarker)
+	}
 
 	// Add empty line after the statement
 	stmt.Decorations().After = dst.EmptyLine
@@ -141,8 +145,8 @@ func insertStatement(body *dst.BlockStmt, stmtStr string) bool {
 }
 
 // updateStatement updates a statement at the given index.
-// The statement is marked with GeneratedMarker for idempotency.
-func updateStatement(body *dst.BlockStmt, index int, stmtStr string) bool {
+// If useMarker is true, the statement is marked with GeneratedMarker for idempotency.
+func updateStatement(body *dst.BlockStmt, index int, stmtStr string, useMarker bool) bool {
 	if index < 0 || index >= len(body.List) {
 		return false
 	}
@@ -152,8 +156,10 @@ func updateStatement(body *dst.BlockStmt, index int, stmtStr string) bool {
 		return false
 	}
 
-	// Add the generated marker as an end-of-line comment
-	stmt.Decorations().End.Append(GeneratedMarker)
+	// Optionally add the generated marker as an end-of-line comment
+	if useMarker {
+		stmt.Decorations().End.Append(GeneratedMarker)
+	}
 
 	// Preserve Before and After decorations from the old statement
 	oldStmt := body.List[index]
@@ -195,6 +201,43 @@ func parseStatement(stmtStr string) (dst.Stmt, error) {
 	// Return a block statement isn't valid here, so we just take the first
 	// TODO: Support multi-statement insertion
 	return funcDecl.Body.List[0], nil
+}
+
+// stmtToString converts a DST statement back to a string.
+// This is used for exact comparison in skeleton matching.
+func stmtToString(stmt dst.Stmt) string {
+	// Create a minimal file containing just this statement
+	df := &dst.File{
+		Name: dst.NewIdent("p"),
+		Decls: []dst.Decl{
+			&dst.FuncDecl{
+				Name: dst.NewIdent("f"),
+				Type: &dst.FuncType{},
+				Body: &dst.BlockStmt{
+					List: []dst.Stmt{stmt},
+				},
+			},
+		},
+	}
+
+	// Restore to AST
+	fset, f, err := decorator.RestoreFile(df)
+	if err != nil {
+		return ""
+	}
+
+	// Extract just the statement part
+	funcDecl := f.Decls[0].(*ast.FuncDecl)
+	if len(funcDecl.Body.List) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+	if err := format.Node(&buf, fset, funcDecl.Body.List[0]); err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // normalizeStatement normalizes whitespace in a statement string.
