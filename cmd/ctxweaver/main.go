@@ -54,9 +54,9 @@ func run() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Override config with flags
-	if test {
-		cfg.Test = true
+	// Override config with explicitly passed flags
+	if isFlagPassed("test") {
+		cfg.Test = test
 	}
 
 	// Get patterns from args or config
@@ -170,4 +170,15 @@ func runHooks(phase string, commands []string, silent bool) error {
 	}
 
 	return nil
+}
+
+// isFlagPassed checks if a flag was explicitly passed on the command line.
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
