@@ -4,26 +4,12 @@ import (
 	"fmt"
 
 	"github.com/dave/dst"
-	"golang.org/x/tools/go/packages"
 
 	"github.com/mpyw/ctxweaver/internal/directive"
 	"github.com/mpyw/ctxweaver/internal/dstutil"
 	"github.com/mpyw/ctxweaver/pkg/carrier"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
-
-// processFunctions processes functions using type info from packages.Package.
-// Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
-func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool, error) {
-	return p.processFunctionsCore(df, pkg.PkgPath, nil)
-}
-
-// processFunctionsForSource processes functions using fuzzy alias resolution.
-// Used by TransformSource when type info is not available.
-func (p *Processor) processFunctionsForSource(df *dst.File, pkgPath string) (bool, error) {
-	aliases := carrier.ResolveAliases(df.Imports)
-	return p.processFunctionsCore(df, pkgPath, aliases)
-}
 
 func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	if decl.Type == nil || decl.Type.Params == nil || len(decl.Type.Params.List) == 0 {
@@ -32,9 +18,9 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	return decl.Type.Params.List[0]
 }
 
-// processFunctionsCore is the shared implementation for processing functions.
-// If aliases is nil, uses dst.Ident.Path for import resolution.
-func (p *Processor) processFunctionsCore(df *dst.File, pkgPath string, aliases map[string]string) (bool, error) {
+// processFunctions processes functions in the DST file.
+// Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
+func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error) {
 	modified := false
 	var renderErr error
 
@@ -61,7 +47,7 @@ func (p *Processor) processFunctionsCore(df *dst.File, pkgPath string, aliases m
 		}
 
 		// Check if first param is a context carrier
-		carrierDef, varName, ok := carrier.Match(param, aliases, p.registry)
+		carrierDef, varName, ok := carrier.Match(param, p.registry)
 		if !ok {
 			return true
 		}
