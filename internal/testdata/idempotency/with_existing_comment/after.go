@@ -1,0 +1,14 @@
+package test
+
+import (
+	"context"
+
+	"github.com/newrelic/go-agent/v3/newrelic"
+)
+
+func Foo(ctx context.Context) error {
+	defer newrelic.FromContext(ctx).StartSegment("test.Foo").End()
+
+	// Important business logic below
+	return nil
+}

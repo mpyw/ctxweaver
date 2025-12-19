@@ -100,6 +100,12 @@ func runIdempotencyTest(t *testing.T, name, dir string) {
 			t.Fatalf("failed to read before.go: %v", err)
 		}
 
+		afterPath := filepath.Join(dir, "after.go")
+		want, err := os.ReadFile(afterPath)
+		if err != nil {
+			t.Fatalf("failed to read after.go: %v", err)
+		}
+
 		cfg := loadTestConfig(dir)
 
 		registry, err := config.NewCarrierRegistry()
@@ -115,29 +121,24 @@ func runIdempotencyTest(t *testing.T, name, dir string) {
 		proc := processor.New(registry, tmpl, cfg.Imports)
 
 		// First transformation
-		first, err := proc.TransformSource(before, "test")
+		got, err := proc.TransformSource(before, "test")
 		if err != nil {
-			t.Fatalf("first transform failed: %v", err)
+			t.Fatalf("transform failed: %v", err)
 		}
 
-		// Second transformation (should be stable)
-		second, err := proc.TransformSource(first, "test")
+		// Check against expected output
+		if diff := cmp.Diff(string(want), string(got)); diff != "" {
+			t.Errorf("mismatch (-want +got):\n%s", diff)
+		}
+
+		// Check idempotency (second run should produce same result)
+		second, err := proc.TransformSource(got, "test")
 		if err != nil {
 			t.Fatalf("second transform failed: %v", err)
 		}
 
-		// Third transformation (should still be stable)
-		third, err := proc.TransformSource(second, "test")
-		if err != nil {
-			t.Fatalf("third transform failed: %v", err)
-		}
-
-		if diff := cmp.Diff(string(first), string(second)); diff != "" {
-			t.Errorf("NOT IDEMPOTENT (first vs second):\n%s", diff)
-		}
-
-		if diff := cmp.Diff(string(second), string(third)); diff != "" {
-			t.Errorf("NOT STABLE (second vs third):\n%s", diff)
+		if diff := cmp.Diff(string(got), string(second)); diff != "" {
+			t.Errorf("NOT IDEMPOTENT:\n%s", diff)
 		}
 	})
 }
