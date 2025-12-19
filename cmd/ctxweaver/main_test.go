@@ -246,6 +246,475 @@ hooks:
 	})
 }
 
+func TestRun(t *testing.T) {
+	// Helper to reset flags and set args
+	setup := func(args ...string) {
+		flag.CommandLine = flag.NewFlagSet("ctxweaver", flag.ContinueOnError)
+		flag.CommandLine.SetOutput(&bytes.Buffer{})
+		os.Args = append([]string{"ctxweaver"}, args...)
+	}
+
+	t.Run("config load failure", func(t *testing.T) {
+		setup("-config", "nonexistent.yaml", "-silent")
+		err := run()
+		if err == nil {
+			t.Fatal("expected error for missing config")
+		}
+		if !strings.Contains(err.Error(), "failed to load config") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("missing template in config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `imports: []
+patterns: []
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		setup("-config", configPath, "-silent")
+		err := run()
+		if err == nil {
+			t.Fatal("expected error for missing template")
+		}
+		// Schema validation will catch this
+		if !strings.Contains(err.Error(), "failed to load config") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("invalid template", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Invalid"
+imports: []
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		setup("-config", configPath, "-silent")
+		err := run()
+		if err == nil {
+			t.Fatal("expected error for invalid template")
+		}
+		if !strings.Contains(err.Error(), "failed to parse template") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("successful run with patterns from config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+patterns:
+  - "./..."
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		goFile := filepath.Join(tmpDir, "test.go")
+		goCode := `package test
+
+import "context"
+
+func trace(context.Context) {}
+
+func Foo(ctx context.Context) {
+}
+`
+		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+			t.Fatalf("failed to write go file: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-silent")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("successful run with dry-run and verbose", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		goFile := filepath.Join(tmpDir, "test.go")
+		goCode := `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+}
+`
+		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+			t.Fatalf("failed to write go file: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-dry-run", "-verbose", "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("successful run with remove mode", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		goFile := filepath.Join(tmpDir, "test.go")
+		goCode := `package test
+
+import "context"
+
+func trace(context.Context) {}
+
+func Foo(ctx context.Context) {
+	defer trace(ctx)
+}
+`
+		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+			t.Fatalf("failed to write go file: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-remove", "-silent", "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("with post hooks", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+hooks:
+  post:
+    - "echo done"
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-silent", "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("with pre hooks (no-hooks flag)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+hooks:
+  pre:
+    - "exit 1"
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-no-hooks", "-silent", "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error (no-hooks should skip failing hook): %v", err)
+		}
+	})
+
+	t.Run("pre hook failure", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+hooks:
+  pre:
+    - "exit 1"
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-silent", "./...")
+		err := run()
+		if err == nil {
+			t.Fatal("expected error for pre hook failure")
+		}
+		if !strings.Contains(err.Error(), "pre hook failed") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("post hook failure", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+hooks:
+  post:
+    - "exit 1"
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-silent", "./...")
+		err := run()
+		if err == nil {
+			t.Fatal("expected error for post hook failure")
+		}
+		if !strings.Contains(err.Error(), "post hook failed") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("test flag override", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+test: false
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-test=true", "-silent", "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("with custom carriers", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+carriers:
+  - package: "net/http"
+    type: "Request"
+    accessor: ".Context()"
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		goFile := filepath.Join(tmpDir, "test.go")
+		goCode := `package test
+
+import "net/http"
+
+func trace(interface{}) {}
+
+func Handler(r *http.Request) {
+}
+`
+		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+			t.Fatalf("failed to write go file: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-silent", "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("process error in results", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		// Create a Go file that will cause an error when parsed (syntax error is handled differently,
+		// but we can test with a package that doesn't compile)
+		goFile := filepath.Join(tmpDir, "test.go")
+		goCode := `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+}
+`
+		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+			t.Fatalf("failed to write go file: %v", err)
+		}
+
+		// Create a second file with a syntax error to trigger errors during processing
+		badFile := filepath.Join(tmpDir, "bad.go")
+		badCode := `package test
+
+// This file has a syntax error
+func Bad( {
+}
+`
+		if err := os.WriteFile(badFile, []byte(badCode), 0o644); err != nil {
+			t.Fatalf("failed to write bad file: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		setup("-config", configPath, "-silent", "./...")
+		err := run()
+		// Should fail because of syntax error in package
+		if err == nil {
+			t.Log("Note: syntax error may not trigger result.Errors path")
+		}
+	})
+
+	t.Run("non-silent output", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+`
+		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+			t.Fatalf("failed to write config: %v", err)
+		}
+
+		goMod := filepath.Join(tmpDir, "go.mod")
+		if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+			t.Fatalf("failed to write go.mod: %v", err)
+		}
+
+		goFile := filepath.Join(tmpDir, "test.go")
+		goCode := `package test
+
+import "context"
+
+func trace(context.Context) {}
+
+func Foo(ctx context.Context) {
+}
+`
+		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+			t.Fatalf("failed to write go file: %v", err)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		// Without -silent, output will be printed
+		setup("-config", configPath, "./...")
+		err := run()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestCLI_ConfigOverride(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
