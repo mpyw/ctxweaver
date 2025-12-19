@@ -38,9 +38,10 @@ type Config struct {
 	Patterns []string `yaml:"patterns"`
 	// Test indicates whether to process test files
 	Test bool `yaml:"test"`
-	// Detection configures how existing statements are detected for idempotency.
-	// Options: "skeleton" (default, AST structure comparison), "marker" (//ctxweaver:generated comment)
-	Detection string `yaml:"detection"`
+	// Pre are shell commands to run before processing
+	Pre []string `yaml:"pre"`
+	// Post are shell commands to run after processing
+	Post []string `yaml:"post"`
 }
 
 // CarrierRegistry holds all registered carriers for quick lookup.

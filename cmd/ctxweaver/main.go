@@ -5,15 +5,27 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/processor"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
+// ANSI color codes
+const (
+	colorReset  = "\033[0m"
+	colorCyan   = "\033[36m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorRed    = "\033[31m"
+	colorDim    = "\033[2m"
+)
+
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "ctxweaver: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%sctxweaver: %v%s\n", colorRed, err, colorReset)
 		os.Exit(1)
 	}
 }
@@ -23,6 +35,7 @@ func run() error {
 		configFile string
 		dryRun     bool
 		verbose    bool
+		silent     bool
 		test       bool
 		remove     bool
 	)
@@ -30,6 +43,8 @@ func run() error {
 	flag.StringVar(&configFile, "config", "ctxweaver.yaml", "path to configuration file")
 	flag.BoolVar(&dryRun, "dry-run", false, "print changes without writing files")
 	flag.BoolVar(&verbose, "verbose", false, "print processed files")
+	flag.BoolVar(&silent, "silent", false, "suppress all output except errors")
+	flag.BoolVar(&silent, "s", false, "suppress all output except errors (shorthand)")
 	flag.BoolVar(&test, "test", false, "process test files")
 	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
 	flag.Parse()
@@ -59,6 +74,13 @@ func run() error {
 		return fmt.Errorf("template is required in config file")
 	}
 
+	// Run pre hooks
+	if len(cfg.Pre) > 0 {
+		if err := runHooks("pre", cfg.Pre, silent); err != nil {
+			return err
+		}
+	}
+
 	// Parse template
 	tmpl, err := template.Parse(cfg.Template)
 	if err != nil {
@@ -83,9 +105,18 @@ func run() error {
 		cfg.Imports,
 		processor.WithTest(cfg.Test),
 		processor.WithDryRun(dryRun),
-		processor.WithVerbose(verbose),
+		processor.WithVerbose(verbose && !silent),
 		processor.WithRemove(remove),
 	)
+
+	// Print ctxweaver execution header
+	if !silent {
+		action := "weaving"
+		if remove {
+			action = "removing"
+		}
+		fmt.Printf("%s▶ ctxweaver%s %s%s %s%s\n", colorCyan, colorReset, colorDim, action, strings.Join(patterns, " "), colorReset)
+	}
 
 	// Process
 	result, err := proc.Process(patterns)
@@ -94,15 +125,48 @@ func run() error {
 	}
 
 	// Report results
-	if verbose || dryRun {
-		fmt.Printf("Files processed: %d\n", result.FilesProcessed)
-		fmt.Printf("Files modified: %d\n", result.FilesModified)
+	if !silent && (verbose || dryRun) {
+		fmt.Printf("  Files processed: %d\n", result.FilesProcessed)
+		fmt.Printf("  Files modified: %d\n", result.FilesModified)
+	} else if !silent {
+		fmt.Printf("  %s✓%s %d files processed, %d modified\n", colorGreen, colorReset, result.FilesProcessed, result.FilesModified)
 	}
 
 	if len(result.Errors) > 0 {
 		fmt.Fprintln(os.Stderr, "Errors:")
 		for _, e := range result.Errors {
 			fmt.Fprintf(os.Stderr, "  %v\n", e)
+		}
+	}
+
+	// Run post hooks
+	if len(cfg.Post) > 0 {
+		if err := runHooks("post", cfg.Post, silent); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// runHooks executes a list of shell commands sequentially.
+// If any command fails (non-zero exit code), execution stops and an error is returned.
+func runHooks(phase string, commands []string, silent bool) error {
+	if !silent {
+		fmt.Printf("%s▶ %s%s\n", colorYellow, phase, colorReset)
+	}
+
+	for _, cmdStr := range commands {
+		if !silent {
+			fmt.Printf("  %s$ %s%s\n", colorDim, cmdStr, colorReset)
+		}
+
+		cmd := exec.Command("sh", "-c", cmdStr)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%s hook failed: %s: %w", phase, cmdStr, err)
 		}
 	}
 
