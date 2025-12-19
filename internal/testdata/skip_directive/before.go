@@ -7,6 +7,7 @@ import (
 )
 
 func ProcessWithTrace(ctx context.Context) error {
+
 	// should be modified
 	return nil
 }
@@ -26,6 +27,7 @@ func LegacyEnrichedHandler(ctx context.Context) error {
 }
 
 func AnotherFunc(ctx context.Context) error {
+
 	// should be modified
 	return nil
 }

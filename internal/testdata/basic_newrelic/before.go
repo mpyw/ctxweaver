@@ -1,7 +1,10 @@
 package test
 
-import "context"
+import (
+	"context"
+)
 
 func Foo(ctx context.Context) error {
+
 	return nil
 }

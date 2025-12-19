@@ -15,3 +15,5 @@ func Foo(ctx context.Context) error {
 
 // Dummy to use newrelic import
 var _ = newrelic.Version
+
+func someOtherFunc() {}

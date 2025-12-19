@@ -1,7 +1,13 @@
 package test
 
-import "context"
+import (
+	"context"
+)
+
+//ctxweaver:skip
+func trace(_ context.Context) {}
 
 func Foo(ctx context.Context) {
+
 	println("hello")
 }
