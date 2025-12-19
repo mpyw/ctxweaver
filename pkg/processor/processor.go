@@ -64,11 +64,11 @@ func WithRemove(remove bool) Option {
 }
 
 // New creates a new Processor.
-func New(registry *config.CarrierRegistry, tmpl *template.Template, imports []string, opts ...Option) *Processor {
+func New(registry *config.CarrierRegistry, tmpl *template.Template, importPaths []string, opts ...Option) *Processor {
 	p := &Processor{
 		registry: registry,
 		tmpl:     tmpl,
-		imports:  imports,
+		imports:  importPaths,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -455,9 +455,9 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	return decl.Type.Params.List[0]
 }
 
-func resolveAliases(imports []*dst.ImportSpec) map[string]string {
+func resolveAliases(importSpecs []*dst.ImportSpec) map[string]string {
 	result := make(map[string]string)
-	for _, imp := range imports {
+	for _, imp := range importSpecs {
 		path := strings.Trim(imp.Path.Value, `"`)
 		var local string
 		if imp.Name != nil {
