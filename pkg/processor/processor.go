@@ -16,8 +16,8 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 
-	"github.com/mpyw/ctxweaver/config"
-	"github.com/mpyw/ctxweaver/template"
+	"github.com/mpyw/ctxweaver/pkg/config"
+	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
 // Processor handles code transformation.
@@ -411,4 +411,151 @@ func hasSkipDirective(decs *dst.NodeDecs) bool {
 		}
 	}
 	return false
+}
+
+// TransformSource transforms a single Go source file.
+// This is useful for testing without requiring packages.Load.
+func (p *Processor) TransformSource(src []byte, pkgName string) ([]byte, error) {
+	// Parse with fresh fset for DST conversion
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse source: %w", err)
+	}
+
+	// Convert to DST
+	df, err := decorator.DecorateFile(fset, f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decorate file: %w", err)
+	}
+
+	// Check for file-level skip directive
+	if hasSkipDirective(df.Decorations()) {
+		return src, nil
+	}
+
+	// Process functions
+	modified := p.processFunctionsForSource(df, pkgName)
+	if !modified {
+		return src, nil
+	}
+
+	// Convert back to AST
+	fset, f, err = decorator.RestoreFile(df)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore file: %w", err)
+	}
+
+	// Add imports
+	for _, imp := range p.imports {
+		astutil.AddImport(fset, f, imp)
+	}
+
+	// Format
+	var buf bytes.Buffer
+	if err := format.Node(&buf, fset, f); err != nil {
+		return nil, fmt.Errorf("failed to format file: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool {
+	modified := false
+	aliases := resolveAliases(df.Imports)
+
+	dst.Inspect(df, func(n dst.Node) bool {
+		decl, ok := n.(*dst.FuncDecl)
+		if !ok {
+			return true
+		}
+
+		// Skip if function has skip directive
+		if hasSkipDirective(decl.Decorations()) {
+			return true
+		}
+
+		// Skip if no body
+		if decl.Body == nil {
+			return true
+		}
+
+		// Get first parameter
+		param := extractFirstParam(decl)
+		if param == nil {
+			return true
+		}
+
+		// Check if first param is a context carrier
+		carrier, varName, ok := p.matchCarrier(param, aliases)
+		if !ok {
+			return true
+		}
+
+		// Build template variables
+		vars := p.buildVarsForSource(df, decl, pkgName, carrier, varName)
+
+		// Render statement
+		stmt, err := p.tmpl.Render(vars)
+		if err != nil {
+			// Skip on render error
+			return true
+		}
+
+		// Check existing statement and update if needed
+		action := p.detectAction(decl.Body, vars.FuncName)
+
+		switch action.Type {
+		case ActionInsert:
+			if insertStatement(decl.Body, stmt) {
+				modified = true
+			}
+		case ActionUpdate:
+			if updateStatement(decl.Body, action.Index, stmt) {
+				modified = true
+			}
+		case ActionSkip:
+			// Already up to date
+		}
+
+		return true
+	})
+
+	return modified
+}
+
+func (p *Processor) buildVarsForSource(df *dst.File, decl *dst.FuncDecl, pkgName string, carrier config.CarrierDef, varName string) template.Vars {
+	vars := template.Vars{
+		Ctx:          carrier.BuildContextExpr(varName),
+		CtxVar:       varName,
+		PackageName:  df.Name.Name,
+		PackagePath:  pkgName,
+		FuncBaseName: decl.Name.Name,
+	}
+
+	// Build fully qualified function name
+	if decl.Recv != nil && len(decl.Recv.List) > 0 {
+		vars.IsMethod = true
+		recv := decl.Recv.List[0]
+
+		if len(recv.Names) > 0 {
+			vars.ReceiverVar = recv.Names[0].Name
+		}
+
+		switch typ := recv.Type.(type) {
+		case *dst.StarExpr:
+			vars.IsPointerReceiver = true
+			if ident, ok := typ.X.(*dst.Ident); ok {
+				vars.ReceiverType = ident.Name
+				vars.FuncName = fmt.Sprintf("%s.(*%s).%s", vars.PackageName, ident.Name, decl.Name.Name)
+			}
+		case *dst.Ident:
+			vars.ReceiverType = typ.Name
+			vars.FuncName = fmt.Sprintf("%s.%s.%s", vars.PackageName, typ.Name, decl.Name.Name)
+		}
+	} else {
+		vars.FuncName = fmt.Sprintf("%s.%s", vars.PackageName, decl.Name.Name)
+	}
+
+	return vars
 }

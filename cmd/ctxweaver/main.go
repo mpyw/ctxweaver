@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mpyw/ctxweaver/config"
-	"github.com/mpyw/ctxweaver/processor"
-	"github.com/mpyw/ctxweaver/template"
+	"github.com/mpyw/ctxweaver/pkg/config"
+	"github.com/mpyw/ctxweaver/pkg/processor"
+	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
 func main() {
