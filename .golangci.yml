@@ -5,6 +5,7 @@ run:
   modules-download-mode: readonly
 
 linters:
+  default: none
   enable:
     - errcheck
     - gocritic
@@ -14,6 +15,19 @@ linters:
     - staticcheck
     - unconvert
     - unused
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocritic
 
 formatters:
   enable:
@@ -24,20 +38,6 @@ formatters:
       local-prefixes:
         - github.com/mpyw/ctxweaver
 
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - hugeParam
-
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocritic
-
   max-issues-per-linter: 0
   max-same-issues: 0
