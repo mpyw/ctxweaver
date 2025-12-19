@@ -143,6 +143,10 @@ func (p *Processor) shouldProcessFile(filename string) bool {
 	if !p.test && strings.HasSuffix(filename, "_test.go") {
 		return false
 	}
+	// Skip testdata directories (convention for test fixtures)
+	if strings.Contains(filename, "/testdata/") || strings.Contains(filename, "\\testdata\\") {
+		return false
+	}
 	return true
 }
 
@@ -158,6 +162,11 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 	f, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse file: %w", err)
+	}
+
+	// Skip generated files (files with "// Code generated" comment)
+	if ast.IsGenerated(f) {
+		return false, nil
 	}
 
 	// Convert to DST
@@ -479,6 +488,11 @@ func (p *Processor) TransformSource(src []byte, pkgName string) ([]byte, error) 
 	f, err := parser.ParseFile(fset, "test.go", src, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse source: %w", err)
+	}
+
+	// Skip generated files (files with "// Code generated" comment)
+	if ast.IsGenerated(f) {
+		return src, nil
 	}
 
 	// Convert to DST
