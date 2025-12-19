@@ -10,14 +10,14 @@ type UserService struct {
 }
 
 func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
-	defer newrelic.FromContext(ctx).StartSegment("service.(*UserService).GetByID").End()
+	defer newrelic.FromContext(ctx).StartSegment("service.(*UserService).GetByID").End() //ctxweaver:generated
 
 	// query user
 	return nil, nil
 }
 
 func (s *UserService) Create(ctx context.Context, user *User) error {
-	defer newrelic.FromContext(ctx).StartSegment("service.(*UserService).Create").End()
+	defer newrelic.FromContext(ctx).StartSegment("service.(*UserService).Create").End() //ctxweaver:generated
 
 	// create user
 	return nil

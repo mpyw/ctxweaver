@@ -6,7 +6,7 @@ import (
 )
 
 func ProcessWithTrace(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("skip.ProcessWithTrace").End()
+	defer newrelic.FromContext(ctx).StartSegment("skip.ProcessWithTrace").End() //ctxweaver:generated
 
 	// should be modified
 	return nil
@@ -19,7 +19,7 @@ func LegacyHandler(ctx context.Context) error {
 }
 
 func AnotherFunc(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("skip.AnotherFunc").End()
+	defer newrelic.FromContext(ctx).StartSegment("skip.AnotherFunc").End() //ctxweaver:generated
 
 	// should be modified
 	return nil

@@ -10,14 +10,14 @@ type Handler struct {
 }
 
 func (h Handler) Handle(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("handler.Handler.Handle").End()
+	defer newrelic.FromContext(ctx).StartSegment("handler.Handler.Handle").End() //ctxweaver:generated
 
 	// handle request
 	return nil
 }
 
 func (h Handler) String(ctx context.Context) string {
-	defer newrelic.FromContext(ctx).StartSegment("handler.Handler.String").End()
+	defer newrelic.FromContext(ctx).StartSegment("handler.Handler.String").End() //ctxweaver:generated
 
 	return h.name
 }

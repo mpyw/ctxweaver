@@ -7,14 +7,14 @@ import (
 )
 
 func AlreadyInstrumented(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("existing.AlreadyInstrumented").End()
+	defer newrelic.FromContext(ctx).StartSegment("existing.AlreadyInstrumented").End() //ctxweaver:generated
 
 	// business logic
 	return nil
 }
 
 func NeedsUpdate(ctx context.Context) error {
-	defer newrelic.FromContext(ctx).StartSegment("existing.NeedsUpdate").End()
+	defer newrelic.FromContext(ctx).StartSegment("existing.NeedsUpdate").End() //ctxweaver:generated
 
 	// name is wrong, should be updated
 	return nil

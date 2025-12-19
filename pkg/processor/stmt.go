@@ -10,6 +10,27 @@ import (
 	"github.com/dave/dst/decorator"
 )
 
+// GeneratedMarker is the marker comment used to identify ctxweaver-generated statements.
+// This enables idempotency: running ctxweaver multiple times will update existing
+// generated statements rather than inserting duplicates.
+const GeneratedMarker = "//ctxweaver:generated"
+
+// hasGeneratedMarker checks if a statement has the ctxweaver:generated marker.
+func hasGeneratedMarker(stmt dst.Stmt) bool {
+	for _, comment := range stmt.Decorations().End.All() {
+		if strings.Contains(comment, "ctxweaver:generated") {
+			return true
+		}
+	}
+	// Also check start decorations for backward compatibility
+	for _, comment := range stmt.Decorations().Start.All() {
+		if strings.Contains(comment, "ctxweaver:generated") {
+			return true
+		}
+	}
+	return false
+}
+
 // isMatchingStatement checks if a statement matches our pattern with the expected function name.
 // This is used to detect if the statement is already up-to-date.
 func isMatchingStatement(stmt dst.Stmt, expectedFuncName string) bool {
@@ -102,11 +123,15 @@ func extractFuncNameFromDefer(def *dst.DeferStmt) string {
 }
 
 // insertStatement inserts a statement at the beginning of a function body.
+// The statement is marked with GeneratedMarker for idempotency.
 func insertStatement(body *dst.BlockStmt, stmtStr string) bool {
 	stmt, err := parseStatement(stmtStr)
 	if err != nil {
 		return false
 	}
+
+	// Add the generated marker as an end-of-line comment
+	stmt.Decorations().End.Append(GeneratedMarker)
 
 	// Add empty line after the statement
 	stmt.Decorations().After = dst.EmptyLine
@@ -116,6 +141,7 @@ func insertStatement(body *dst.BlockStmt, stmtStr string) bool {
 }
 
 // updateStatement updates a statement at the given index.
+// The statement is marked with GeneratedMarker for idempotency.
 func updateStatement(body *dst.BlockStmt, index int, stmtStr string) bool {
 	if index < 0 || index >= len(body.List) {
 		return false
@@ -126,7 +152,10 @@ func updateStatement(body *dst.BlockStmt, index int, stmtStr string) bool {
 		return false
 	}
 
-	// Preserve decorations from the old statement
+	// Add the generated marker as an end-of-line comment
+	stmt.Decorations().End.Append(GeneratedMarker)
+
+	// Preserve Before and After decorations from the old statement
 	oldStmt := body.List[index]
 	stmt.Decorations().Before = oldStmt.Decorations().Before
 	stmt.Decorations().After = oldStmt.Decorations().After

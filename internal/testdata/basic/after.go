@@ -6,7 +6,7 @@ import (
 )
 
 func ProcessData(ctx context.Context, data string) error {
-	defer newrelic.FromContext(ctx).StartSegment("basic.ProcessData").End()
+	defer newrelic.FromContext(ctx).StartSegment("basic.ProcessData").End() //ctxweaver:generated
 
 	// business logic
 	return nil

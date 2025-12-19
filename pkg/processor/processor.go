@@ -345,8 +345,18 @@ type Action struct {
 }
 
 func (p *Processor) detectAction(body *dst.BlockStmt, expectedFuncName string) Action {
-	// Look for existing defer statement that matches our pattern
+	// Look for existing statement with marker or matching pattern
 	for i, stmt := range body.List {
+		// Check for ctxweaver:generated marker first (universal detection)
+		if hasGeneratedMarker(stmt) {
+			// If the statement already matches perfectly, skip
+			if isMatchingStatement(stmt, expectedFuncName) {
+				return Action{Type: ActionSkip, Index: i}
+			}
+			// Otherwise update the existing generated statement
+			return Action{Type: ActionUpdate, Index: i}
+		}
+		// Fall back to pattern-based detection for backward compatibility
 		if isMatchingStatement(stmt, expectedFuncName) {
 			return Action{Type: ActionSkip, Index: i}
 		}
