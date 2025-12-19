@@ -138,6 +138,7 @@ func run() error {
 		for _, e := range result.Errors {
 			fmt.Fprintf(os.Stderr, "  %v\n", e)
 		}
+		return fmt.Errorf("%d error(s) occurred", len(result.Errors))
 	}
 
 	// Run post hooks

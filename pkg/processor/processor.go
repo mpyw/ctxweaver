@@ -185,7 +185,10 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 	}
 
 	// Process functions
-	modified := p.processFunctions(df, pkg)
+	modified, err := p.processFunctions(df, pkg)
+	if err != nil {
+		return false, err
+	}
 	if !modified {
 		return false, nil
 	}
@@ -230,9 +233,10 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 	return true, nil
 }
 
-func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) bool {
+func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool, error) {
 	modified := false
 	aliases := resolveAliases(df.Imports)
+	var renderErr error
 
 	dst.Inspect(df, func(n dst.Node) bool {
 		decl, ok := n.(*dst.FuncDecl)
@@ -268,8 +272,8 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) bool {
 		// Render statement
 		stmt, err := p.tmpl.Render(vars)
 		if err != nil {
-			// Skip on render error
-			return true
+			renderErr = fmt.Errorf("function %s: %w", decl.Name.Name, err)
+			return false // Stop inspection
 		}
 
 		// Check existing statement and determine action
@@ -295,7 +299,10 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) bool {
 		return true
 	})
 
-	return modified
+	if renderErr != nil {
+		return false, renderErr
+	}
+	return modified, nil
 }
 
 func (p *Processor) matchCarrier(param *dst.Field, aliases map[string]string) (config.CarrierDef, string, bool) {
@@ -549,7 +556,10 @@ func (p *Processor) TransformSource(src []byte, pkgName string) ([]byte, error) 
 	}
 
 	// Process functions
-	modified := p.processFunctionsForSource(df, pkgName)
+	modified, err := p.processFunctionsForSource(df, pkgName)
+	if err != nil {
+		return nil, err
+	}
 	if !modified {
 		return src, nil
 	}
@@ -587,9 +597,10 @@ func (p *Processor) TransformSource(src []byte, pkgName string) ([]byte, error) 
 	return result, nil
 }
 
-func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool {
+func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) (bool, error) {
 	modified := false
 	aliases := resolveAliases(df.Imports)
+	var renderErr error
 
 	dst.Inspect(df, func(n dst.Node) bool {
 		decl, ok := n.(*dst.FuncDecl)
@@ -625,8 +636,8 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool
 		// Render statement
 		stmt, err := p.tmpl.Render(vars)
 		if err != nil {
-			// Skip on render error
-			return true
+			renderErr = fmt.Errorf("function %s: %w", decl.Name.Name, err)
+			return false // Stop inspection
 		}
 
 		// Check existing statement and determine action
@@ -652,7 +663,10 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool
 		return true
 	})
 
-	return modified
+	if renderErr != nil {
+		return false, renderErr
+	}
+	return modified, nil
 }
 
 func (p *Processor) buildVarsForSource(df *dst.File, decl *dst.FuncDecl, pkgName string, carrier config.CarrierDef, varName string) template.Vars {

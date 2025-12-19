@@ -185,6 +185,8 @@ patterns: []
 
 import "context"
 
+func trace(context.Context) {}
+
 func Foo(ctx context.Context) {
 }
 `
