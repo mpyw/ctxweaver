@@ -1,6 +1,10 @@
 package skip
 
-import "context"
+import (
+	"context"
+
+	"github.com/newrelic/go-agent/v3/newrelic"
+)
 
 func ProcessWithTrace(ctx context.Context) error {
 	// should be modified
@@ -8,8 +12,16 @@ func ProcessWithTrace(ctx context.Context) error {
 }
 
 //ctxweaver:skip
-func LegacyHandler(ctx context.Context) error {
-	// should NOT be modified
+func LegacySimpleHandler(ctx context.Context) error {
+	// existing business logic
+	return nil
+}
+
+//ctxweaver:skip
+func LegacyEnrichedHandler(ctx context.Context) error {
+	defer newrelic.FromContext(ctx).StartSegment("skip.LegacyEnrichedHandler").End()
+
+	// existing business logic
 	return nil
 }
 
