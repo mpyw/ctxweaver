@@ -13,6 +13,8 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
+
+	"github.com/mpyw/ctxweaver/internal/directive"
 )
 
 // Process processes the given package patterns.
@@ -112,7 +114,7 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 	}
 
 	// Check for file-level skip directive
-	if hasSkipDirective(df.Decorations()) {
+	if directive.HasSkipDirective(df.Decorations()) {
 		return false, nil
 	}
 

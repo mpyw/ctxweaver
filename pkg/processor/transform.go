@@ -11,6 +11,8 @@ import (
 	"github.com/dave/dst/decorator"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/imports"
+
+	"github.com/mpyw/ctxweaver/internal/directive"
 )
 
 // TransformSource transforms a single Go source file.
@@ -35,7 +37,7 @@ func (p *Processor) TransformSource(src []byte, pkgName string) ([]byte, error) 
 	}
 
 	// Check for file-level skip directive
-	if hasSkipDirective(df.Decorations()) {
+	if directive.HasSkipDirective(df.Decorations()) {
 		return src, nil
 	}
 

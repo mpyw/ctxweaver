@@ -6,8 +6,9 @@ import (
 	"github.com/dave/dst"
 	"golang.org/x/tools/go/packages"
 
+	"github.com/mpyw/ctxweaver/internal/directive"
 	"github.com/mpyw/ctxweaver/internal/dstutil"
-	"github.com/mpyw/ctxweaver/pkg/config"
+	"github.com/mpyw/ctxweaver/pkg/carrier"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
@@ -20,8 +21,15 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool,
 // processFunctionsForSource processes functions using fuzzy alias resolution.
 // Used by TransformSource when type info is not available.
 func (p *Processor) processFunctionsForSource(df *dst.File, pkgPath string) (bool, error) {
-	aliases := resolveAliases(df.Imports)
+	aliases := carrier.ResolveAliases(df.Imports)
 	return p.processFunctionsCore(df, pkgPath, aliases)
+}
+
+func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
+	if decl.Type == nil || decl.Type.Params == nil || len(decl.Type.Params.List) == 0 {
+		return nil
+	}
+	return decl.Type.Params.List[0]
 }
 
 // processFunctionsCore is the shared implementation for processing functions.
@@ -37,7 +45,7 @@ func (p *Processor) processFunctionsCore(df *dst.File, pkgPath string, aliases m
 		}
 
 		// Skip if function has skip directive
-		if hasSkipDirective(decl.Decorations()) {
+		if directive.HasSkipDirective(decl.Decorations()) {
 			return true
 		}
 
@@ -53,13 +61,13 @@ func (p *Processor) processFunctionsCore(df *dst.File, pkgPath string, aliases m
 		}
 
 		// Check if first param is a context carrier
-		carrier, varName, ok := p.matchCarrier(param, aliases)
+		carrierDef, varName, ok := carrier.Match(param, aliases, p.registry)
 		if !ok {
 			return true
 		}
 
 		// Build template variables
-		vars := p.buildVars(df, decl, pkgPath, carrier, varName)
+		vars := template.BuildVars(df, decl, pkgPath, carrierDef, varName)
 
 		// Render statement
 		stmt, err := p.tmpl.Render(vars)
@@ -99,91 +107,4 @@ func (p *Processor) processFunctionsCore(df *dst.File, pkgPath string, aliases m
 		return false, renderErr
 	}
 	return modified, nil
-}
-
-func (p *Processor) matchCarrier(param *dst.Field, aliases map[string]string) (config.CarrierDef, string, bool) {
-	if len(param.Names) == 0 || param.Names[0].Name == "_" {
-		return config.CarrierDef{}, "", false
-	}
-
-	varName := param.Names[0].Name
-
-	// Handle pointer types
-	typ := param.Type
-	if star, ok := typ.(*dst.StarExpr); ok {
-		typ = star.X
-	}
-
-	var pkgPath, typeName string
-
-	switch t := typ.(type) {
-	case *dst.SelectorExpr:
-		// SelectorExpr: pkg.Type (e.g., context.Context from source without type info)
-		pkgIdent, ok := t.X.(*dst.Ident)
-		if !ok {
-			return config.CarrierDef{}, "", false
-		}
-		// Prefer type-resolved path from decorator (set by NewDecoratorFromPackage)
-		// Fall back to fuzzy alias resolution when type info is not available
-		pkgPath = pkgIdent.Path
-		if pkgPath == "" && aliases != nil {
-			pkgPath = aliases[pkgIdent.Name]
-		}
-		typeName = t.Sel.Name
-
-	case *dst.Ident:
-		// Ident with Path: NewDecoratorFromPackage resolves the type and sets Path
-		pkgPath = t.Path
-		typeName = t.Name
-
-	default:
-		return config.CarrierDef{}, "", false
-	}
-
-	if pkgPath == "" {
-		return config.CarrierDef{}, "", false
-	}
-
-	carrier, found := p.registry.Lookup(pkgPath, typeName)
-	if !found {
-		return config.CarrierDef{}, "", false
-	}
-
-	return carrier, varName, true
-}
-
-func (p *Processor) buildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.CarrierDef, varName string) template.Vars {
-	vars := template.Vars{
-		Ctx:          carrier.BuildContextExpr(varName),
-		CtxVar:       varName,
-		PackageName:  df.Name.Name,
-		PackagePath:  pkgPath,
-		FuncBaseName: decl.Name.Name,
-	}
-
-	// Build fully qualified function name
-	if decl.Recv != nil && len(decl.Recv.List) > 0 {
-		vars.IsMethod = true
-		recv := decl.Recv.List[0]
-
-		if len(recv.Names) > 0 {
-			vars.ReceiverVar = recv.Names[0].Name
-		}
-
-		switch typ := recv.Type.(type) {
-		case *dst.StarExpr:
-			vars.IsPointerReceiver = true
-			if ident, ok := typ.X.(*dst.Ident); ok {
-				vars.ReceiverType = ident.Name
-				vars.FuncName = fmt.Sprintf("%s.(*%s).%s", vars.PackageName, ident.Name, decl.Name.Name)
-			}
-		case *dst.Ident:
-			vars.ReceiverType = typ.Name
-			vars.FuncName = fmt.Sprintf("%s.%s.%s", vars.PackageName, typ.Name, decl.Name.Name)
-		}
-	} else {
-		vars.FuncName = fmt.Sprintf("%s.%s", vars.PackageName, decl.Name.Name)
-	}
-
-	return vars
 }

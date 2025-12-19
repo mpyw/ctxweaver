@@ -5,6 +5,7 @@ import (
 
 	"github.com/dave/dst"
 
+	"github.com/mpyw/ctxweaver/internal/directive"
 	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 
@@ -64,7 +65,7 @@ func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (acti
 
 		if allMatch {
 			// Check if first statement has skip directive (manually added, should not be touched)
-			if hasStmtSkipDirective(body.List[i]) {
+			if directive.HasStmtSkipDirective(body.List[i]) {
 				return action{actionType: actionSkip, index: i, count: stmtCount}, nil
 			}
 			if p.remove {
