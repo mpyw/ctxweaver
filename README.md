@@ -112,6 +112,9 @@ ctxweaver -test ./...
 
 ## Template System
 
+> [!TIP]
+> For Go `text/template` syntax guide, see: https://docs.gomplate.ca/syntax/
+
 ### Available Variables
 
 | Variable | Type | Description |
