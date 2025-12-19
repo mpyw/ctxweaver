@@ -8,9 +8,6 @@ import (
 	"github.com/dave/dst"
 )
 
-// DebugSkeleton enables debug output for skeleton matching
-var DebugSkeleton = false
-
 // MatchesSkeleton compares two statements by their AST structure.
 // It returns true if both statements have the same "skeleton" - same node types
 // and static identifiers, but potentially different dynamic values (variables, literals).
@@ -32,9 +29,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 		return true
 	}
 	if a == nil || b == nil {
-		if DebugSkeleton {
-			fmt.Printf("[skeleton] %s: nil mismatch (a=%v, b=%v)\n", path, a, b)
-		}
 		return false
 	}
 
@@ -44,35 +38,13 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 		// Special case: SelectorExpr vs Ident (due to import resolution)
 		if selA, okA := a.(*dst.SelectorExpr); okA {
 			if identB, okB := b.(*dst.Ident); okB && identB.Path != "" {
-				// Compare: selA.Sel.Name should match identB.Name
-				if selA.Sel.Name != identB.Name {
-					if DebugSkeleton {
-						fmt.Printf("[skeleton] %s: SelectorExpr.Sel vs Ident name mismatch %q vs %q\n", path, selA.Sel.Name, identB.Name)
-					}
-					return false
-				}
-				if DebugSkeleton {
-					fmt.Printf("[skeleton] %s: SelectorExpr(%s) matches Ident(%s, path=%s)\n", path, selA.Sel.Name, identB.Name, identB.Path)
-				}
-				return true
+				return selA.Sel.Name == identB.Name
 			}
 		}
 		if identA, okA := a.(*dst.Ident); okA && identA.Path != "" {
 			if selB, okB := b.(*dst.SelectorExpr); okB {
-				if identA.Name != selB.Sel.Name {
-					if DebugSkeleton {
-						fmt.Printf("[skeleton] %s: Ident vs SelectorExpr.Sel name mismatch %q vs %q\n", path, identA.Name, selB.Sel.Name)
-					}
-					return false
-				}
-				if DebugSkeleton {
-					fmt.Printf("[skeleton] %s: Ident(%s, path=%s) matches SelectorExpr(%s)\n", path, identA.Name, identA.Path, selB.Sel.Name)
-				}
-				return true
+				return identA.Name == selB.Sel.Name
 			}
-		}
-		if DebugSkeleton {
-			fmt.Printf("[skeleton] %s: type mismatch %T vs %T\n", path, a, b)
 		}
 		return false
 	}
@@ -102,9 +74,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 	case *dst.BlockStmt:
 		nodeB := b.(*dst.BlockStmt)
 		if len(nodeA.List) != len(nodeB.List) {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: list length mismatch %d vs %d\n", path, len(nodeA.List), len(nodeB.List))
-			}
 			return false
 		}
 		for i := range nodeA.List {
@@ -117,15 +86,9 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 	case *dst.AssignStmt:
 		nodeB := b.(*dst.AssignStmt)
 		if nodeA.Tok != nodeB.Tok {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: token mismatch %v vs %v\n", path, nodeA.Tok, nodeB.Tok)
-			}
 			return false
 		}
 		if len(nodeA.Lhs) != len(nodeB.Lhs) || len(nodeA.Rhs) != len(nodeB.Rhs) {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: lhs/rhs length mismatch\n", path)
-			}
 			return false
 		}
 		for i := range nodeA.Lhs {
@@ -146,9 +109,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 			return false
 		}
 		if len(nodeA.Args) != len(nodeB.Args) {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: args length mismatch %d vs %d\n", path, len(nodeA.Args), len(nodeB.Args))
-			}
 			return false
 		}
 		for i := range nodeA.Args {
@@ -160,40 +120,21 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 
 	case *dst.SelectorExpr:
 		nodeB := b.(*dst.SelectorExpr)
-		// Compare selector name (static identifier like method name)
 		if nodeA.Sel.Name != nodeB.Sel.Name {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: Sel.Name mismatch %q vs %q\n", path, nodeA.Sel.Name, nodeB.Sel.Name)
-			}
 			return false
 		}
 		return compareNodes(nodeA.X, nodeB.X, path+".X", exactMode)
 
 	case *dst.Ident:
 		nodeB := b.(*dst.Ident)
-		// Compare identifier names exactly
-		if nodeA.Name != nodeB.Name {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: Ident.Name mismatch %q vs %q\n", path, nodeA.Name, nodeB.Name)
-			}
-			return false
-		}
-		return true
+		return nodeA.Name == nodeB.Name
 
 	case *dst.BasicLit:
 		nodeB := b.(*dst.BasicLit)
-		// For literals, always compare types
 		if nodeA.Kind != nodeB.Kind {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: BasicLit.Kind mismatch %v vs %v\n", path, nodeA.Kind, nodeB.Kind)
-			}
 			return false
 		}
-		// In exact mode, also compare values
 		if exactMode && nodeA.Value != nodeB.Value {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: BasicLit.Value mismatch %q vs %q\n", path, nodeA.Value, nodeB.Value)
-			}
 			return false
 		}
 		return true
@@ -201,9 +142,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 	case *dst.UnaryExpr:
 		nodeB := b.(*dst.UnaryExpr)
 		if nodeA.Op != nodeB.Op {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: UnaryExpr.Op mismatch %v vs %v\n", path, nodeA.Op, nodeB.Op)
-			}
 			return false
 		}
 		return compareNodes(nodeA.X, nodeB.X, path+".X", exactMode)
@@ -211,9 +149,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 	case *dst.BinaryExpr:
 		nodeB := b.(*dst.BinaryExpr)
 		if nodeA.Op != nodeB.Op {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: BinaryExpr.Op mismatch %v vs %v\n", path, nodeA.Op, nodeB.Op)
-			}
 			return false
 		}
 		return compareNodes(nodeA.X, nodeB.X, path+".X", exactMode) &&
@@ -241,9 +176,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 	case *dst.ReturnStmt:
 		nodeB := b.(*dst.ReturnStmt)
 		if len(nodeA.Results) != len(nodeB.Results) {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: Results length mismatch %d vs %d\n", path, len(nodeA.Results), len(nodeB.Results))
-			}
 			return false
 		}
 		for i := range nodeA.Results {
@@ -256,9 +188,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 	case *dst.CaseClause:
 		nodeB := b.(*dst.CaseClause)
 		if len(nodeA.List) != len(nodeB.List) || len(nodeA.Body) != len(nodeB.Body) {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: CaseClause length mismatch\n", path)
-			}
 			return false
 		}
 		for i := range nodeA.List {
@@ -279,9 +208,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 			return false
 		}
 		if len(nodeA.Elts) != len(nodeB.Elts) {
-			if DebugSkeleton {
-				fmt.Printf("[skeleton] %s: Elts length mismatch %d vs %d\n", path, len(nodeA.Elts), len(nodeB.Elts))
-			}
 			return false
 		}
 		for i := range nodeA.Elts {
@@ -307,9 +233,6 @@ func compareNodes(a, b dst.Node, path string, exactMode bool) bool {
 
 	default:
 		// For unsupported node types, fall back to type comparison only
-		if DebugSkeleton {
-			fmt.Printf("[skeleton] %s: unhandled type %T (allowing)\n", path, a)
-		}
 		return true
 	}
 }
@@ -320,15 +243,9 @@ func compareFieldLists(a, b *dst.FieldList, path string, exactMode bool) bool {
 		return true
 	}
 	if a == nil || b == nil {
-		if DebugSkeleton {
-			fmt.Printf("[skeleton] %s: FieldList nil mismatch\n", path)
-		}
 		return false
 	}
 	if len(a.List) != len(b.List) {
-		if DebugSkeleton {
-			fmt.Printf("[skeleton] %s: FieldList length mismatch %d vs %d\n", path, len(a.List), len(b.List))
-		}
 		return false
 	}
 	for i := range a.List {

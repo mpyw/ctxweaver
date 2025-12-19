@@ -1,13 +1,60 @@
 package dstutil
 
 import (
+	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
+	"strings"
 	"testing"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
 )
+
+// stmtsToStrings converts DST statements to their string representations.
+// Test helper only.
+func stmtsToStrings(stmts []dst.Stmt) []string {
+	result := make([]string, len(stmts))
+	for i, stmt := range stmts {
+		result[i] = stmtToString(stmt)
+	}
+	return result
+}
+
+// stmtToString converts a DST statement back to a string.
+// Test helper only.
+func stmtToString(stmt dst.Stmt) string {
+	df := &dst.File{
+		Name: dst.NewIdent("p"),
+		Decls: []dst.Decl{
+			&dst.FuncDecl{
+				Name: dst.NewIdent("f"),
+				Type: &dst.FuncType{},
+				Body: &dst.BlockStmt{
+					List: []dst.Stmt{stmt},
+				},
+			},
+		},
+	}
+
+	fset, f, err := decorator.RestoreFile(df)
+	if err != nil {
+		return ""
+	}
+
+	funcDecl := f.Decls[0].(*ast.FuncDecl)
+	if len(funcDecl.Body.List) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+	if err := format.Node(&buf, fset, funcDecl.Body.List[0]); err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(buf.String())
+}
 
 func TestParseStatements(t *testing.T) {
 	tests := map[string]struct {
@@ -298,17 +345,17 @@ func TestStmtsToStrings(t *testing.T) {
 		mustParseStmt(t, `defer foo()`),
 	}
 
-	result := StmtsToStrings(stmts)
+	result := stmtsToStrings(stmts)
 
 	if len(result) != 2 {
-		t.Fatalf("StmtsToStrings() returned %d strings, want 2", len(result))
+		t.Fatalf("stmtsToStrings() returned %d strings, want 2", len(result))
 	}
 
 	if result[0] != "x := 1" {
-		t.Errorf("StmtsToStrings()[0] = %q, want %q", result[0], "x := 1")
+		t.Errorf("stmtsToStrings()[0] = %q, want %q", result[0], "x := 1")
 	}
 	if result[1] != "defer foo()" {
-		t.Errorf("StmtsToStrings()[1] = %q, want %q", result[1], "defer foo()")
+		t.Errorf("stmtsToStrings()[1] = %q, want %q", result[1], "defer foo()")
 	}
 }
 
