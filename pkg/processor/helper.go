@@ -13,6 +13,10 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	return decl.Type.Params.List[0]
 }
 
+// resolveAliases builds a map from local import names to package paths.
+// This is used as a fallback for TransformSource when type info is not available.
+// When using packages.Load + NewDecoratorFromPackage, dst.Ident.Path is set
+// directly by the decorator, making this function unnecessary.
 func resolveAliases(importSpecs []*dst.ImportSpec) map[string]string {
 	result := make(map[string]string)
 	for _, imp := range importSpecs {

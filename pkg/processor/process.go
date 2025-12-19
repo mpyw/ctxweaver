@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dave/dst/decorator"
+	"github.com/dave/dst/decorator/resolver/guess"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
@@ -41,6 +42,9 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 			continue
 		}
 
+		// Create decorator once per package for efficient type-resolved DST conversion
+		dec := decorator.NewDecoratorFromPackage(pkg)
+
 		for _, file := range pkg.Syntax {
 			// Get filename from AST position (more reliable than index-based access)
 			pos := pkg.Fset.Position(file.Pos())
@@ -55,7 +59,7 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 
 			result.FilesProcessed++
 
-			modified, err := p.processFile(pkg, file, filename)
+			modified, err := p.processFile(pkg, dec, file, filename)
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", filename, err))
 				continue
@@ -73,6 +77,16 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 	return result, nil
 }
 
+// buildRestorerResolver creates a resolver from packages.Package.Imports.
+// This avoids additional packages.Load calls while providing accurate package names.
+func buildRestorerResolver(pkg *packages.Package) guess.RestorerResolver {
+	m := make(map[string]string, len(pkg.Imports))
+	for path, imported := range pkg.Imports {
+		m[path] = imported.Name
+	}
+	return guess.WithMap(m)
+}
+
 func (p *Processor) shouldProcessFile(filename string) bool {
 	// Skip test files if not enabled
 	if !p.test && strings.HasSuffix(filename, "_test.go") {
@@ -85,14 +99,14 @@ func (p *Processor) shouldProcessFile(filename string) bool {
 	return true
 }
 
-func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filename string) (bool, error) {
+func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator, astFile *ast.File, filename string) (bool, error) {
 	// Skip generated files (files with "// Code generated" comment)
 	if ast.IsGenerated(astFile) {
 		return false, nil
 	}
 
-	// Convert to DST using the package's FileSet
-	df, err := decorator.DecorateFile(pkg.Fset, astFile)
+	// Convert to DST using type-resolved decorator (sets dst.Ident.Path automatically)
+	df, err := dec.DecorateFile(astFile)
 	if err != nil {
 		return false, fmt.Errorf("failed to decorate file: %w", err)
 	}
@@ -111,11 +125,13 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 		return false, nil
 	}
 
-	// Convert back to AST
-	fset, f, err := decorator.RestoreFile(df)
+	// Convert back to AST using package import info (no additional packages.Load)
+	restorer := decorator.NewRestorerWithImports(pkg.PkgPath, buildRestorerResolver(pkg))
+	f, err := restorer.RestoreFile(df)
 	if err != nil {
 		return false, fmt.Errorf("failed to restore file: %w", err)
 	}
+	fset := restorer.Fset
 
 	// Add imports
 	for _, imp := range p.imports {

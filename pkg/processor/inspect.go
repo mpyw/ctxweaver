@@ -12,11 +12,9 @@ import (
 )
 
 // processFunctions processes functions using type info from packages.Package.
-// Uses dst.Ident.Path set by NewDecoratorFromPackage for accurate import resolution.
-// Falls back to alias resolution when Ident.Path is not set.
+// Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
 func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool, error) {
-	aliases := resolveAliases(df.Imports)
-	return p.processFunctionsCore(df, pkg.PkgPath, aliases)
+	return p.processFunctionsCore(df, pkg.PkgPath, nil)
 }
 
 // processFunctionsForSource processes functions using fuzzy alias resolution.
