@@ -38,7 +38,7 @@ func TestTransformSource_Golden(t *testing.T) {
 	testCases := map[string]struct {
 		dir string
 	}{
-		"basic":          {dir: "basic"},
+		"basic_newrelic": {dir: "basic_newrelic"},
 		"method_pointer": {dir: "method_pointer"},
 		"method_value":   {dir: "method_value"},
 		"echo_context":   {dir: "echo_context"},
@@ -86,7 +86,7 @@ func TestTransformSource_Idempotency(t *testing.T) {
 	testCases := map[string]struct {
 		dir string
 	}{
-		"basic":          {dir: "basic"},
+		"basic_newrelic": {dir: "basic_newrelic"},
 		"method_pointer": {dir: "method_pointer"},
 		"method_value":   {dir: "method_value"},
 		"echo_context":   {dir: "echo_context"},

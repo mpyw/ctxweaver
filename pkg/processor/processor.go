@@ -277,15 +277,15 @@ func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) bool {
 
 		switch action.Type {
 		case ActionInsert:
-			if insertStatement(decl.Body, stmt) {
+			if insertStatements(decl.Body, stmt) {
 				modified = true
 			}
 		case ActionUpdate:
-			if updateStatement(decl.Body, action.Index, stmt) {
+			if updateStatements(decl.Body, action.Index, action.Count, stmt) {
 				modified = true
 			}
 		case ActionRemove:
-			if removeStatement(decl.Body, action.Index) {
+			if removeStatements(decl.Body, action.Index, action.Count) {
 				modified = true
 			}
 		case ActionSkip:
@@ -382,15 +382,16 @@ const (
 // Action represents the action to take and related info.
 type Action struct {
 	Type  ActionType
-	Index int // For ActionUpdate/ActionRemove, the index of the statement
+	Index int // For ActionUpdate/ActionRemove, the starting index
+	Count int // Number of statements to update/remove
 }
 
 // detectAction determines what action to take for a function body.
-// Uses skeleton matching to compare AST structure.
+// Uses skeleton matching to compare AST structure. Supports multi-statement templates.
 func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) Action {
-	// Parse the rendered statement for skeleton comparison
-	targetStmt, err := parseStatement(renderedStmt)
-	if err != nil {
+	// Parse the rendered statements for skeleton comparison
+	targetStmts, err := parseStatements(renderedStmt)
+	if err != nil || len(targetStmts) == 0 {
 		// If we can't parse the rendered statement, fall back to insert (or skip for remove)
 		if p.remove {
 			return Action{Type: ActionSkip}
@@ -398,28 +399,45 @@ func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) Actio
 		return Action{Type: ActionInsert}
 	}
 
-	// Format the target statement for consistent comparison
-	// This ensures unformatted templates match formatted existing code
-	targetStr := stmtToString(targetStmt)
+	// Format the target statements for consistent comparison
+	targetStrs := stmtsToStrings(targetStmts)
+	stmtCount := len(targetStmts)
 
-	for i, stmt := range body.List {
-		// Compare AST structure (works for any statement type)
-		if matchesSkeleton(targetStmt, stmt) {
-			// Check if statement has skip directive (manually added, should not be touched)
-			if hasStmtSkipDirective(stmt) {
-				return Action{Type: ActionSkip, Index: i}
+	for i := range body.List {
+		// Check if we have enough statements remaining to match
+		if i+stmtCount > len(body.List) {
+			break
+		}
+
+		// Try to match all target statements starting at this index
+		allMatch := true
+		allExact := true
+		for j, targetStmt := range targetStmts {
+			existingStmt := body.List[i+j]
+			if !matchesSkeleton(targetStmt, existingStmt) {
+				allMatch = false
+				break
+			}
+			// Check if exact match
+			if stmtToString(existingStmt) != targetStrs[j] {
+				allExact = false
+			}
+		}
+
+		if allMatch {
+			// Check if first statement has skip directive (manually added, should not be touched)
+			if hasStmtSkipDirective(body.List[i]) {
+				return Action{Type: ActionSkip, Index: i, Count: stmtCount}
 			}
 			if p.remove {
-				// In remove mode, remove the matching statement
-				return Action{Type: ActionRemove, Index: i}
+				// In remove mode, remove all matching statements
+				return Action{Type: ActionRemove, Index: i, Count: stmtCount}
 			}
-			// Check if the formatted output matches exactly
-			existingStr := stmtToString(stmt)
-			if existingStr == targetStr {
-				return Action{Type: ActionSkip, Index: i}
+			if allExact {
+				return Action{Type: ActionSkip, Index: i, Count: stmtCount}
 			}
 			// Structure matches but content differs - needs update
-			return Action{Type: ActionUpdate, Index: i}
+			return Action{Type: ActionUpdate, Index: i, Count: stmtCount}
 		}
 	}
 
@@ -616,15 +634,15 @@ func (p *Processor) processFunctionsForSource(df *dst.File, pkgName string) bool
 
 		switch action.Type {
 		case ActionInsert:
-			if insertStatement(decl.Body, stmt) {
+			if insertStatements(decl.Body, stmt) {
 				modified = true
 			}
 		case ActionUpdate:
-			if updateStatement(decl.Body, action.Index, stmt) {
+			if updateStatements(decl.Body, action.Index, action.Count, stmt) {
 				modified = true
 			}
 		case ActionRemove:
-			if removeStatement(decl.Body, action.Index) {
+			if removeStatements(decl.Body, action.Index, action.Count) {
 				modified = true
 			}
 		case ActionSkip:

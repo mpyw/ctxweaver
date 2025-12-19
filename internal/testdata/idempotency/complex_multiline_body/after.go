@@ -15,20 +15,9 @@ func Foo(ctx context.Context, input string) (result string, err error) {
 	// ctxweaver: auto-generated tracing code
 	// DO NOT EDIT - this block is managed by ctxweaver
 	// ==================================================
-	/*
-	 * Function: "test.Foo"
-	 * Context:  ctx
-	 */
-	if /* nil check */ txn := newrelic.FromContext(
-		// Extract transaction from context
-		ctx, // <- context variable
-	); txn != nil /* ensure transaction exists */ {
-		// Register cleanup via defer
-		defer /* start segment */ txn.StartSegment(
-			// Function name for tracing
-			"test.Foo", // <- function identifier
-		).End() // <- end segment on function exit
-	}
+	txn := newrelic.FromContext(ctx)    // Extract transaction from context
+	seg := txn.StartSegment("test.Foo") // Start a new segment
+	defer seg.End()                     // End the segment when function returns
 	// ==================================================
 	// End of ctxweaver generated code
 	// ==================================================
@@ -85,20 +74,9 @@ func Bar(ctx context.Context) error {
 	// ctxweaver: auto-generated tracing code
 	// DO NOT EDIT - this block is managed by ctxweaver
 	// ==================================================
-	/*
-	 * Function: "test.Bar"
-	 * Context:  ctx
-	 */
-	if /* nil check */ txn := newrelic.FromContext(
-		// Extract transaction from context
-		ctx, // <- context variable
-	); txn != nil /* ensure transaction exists */ {
-		// Register cleanup via defer
-		defer /* start segment */ txn.StartSegment(
-			// Function name for tracing
-			"test.Bar", // <- function identifier
-		).End() // <- end segment on function exit
-	}
+	txn := newrelic.FromContext(ctx)    // Extract transaction from context
+	seg := txn.StartSegment("test.Bar") // Start a new segment
+	defer seg.End()                     // End the segment when function returns
 	// ==================================================
 	// End of ctxweaver generated code
 	// ==================================================

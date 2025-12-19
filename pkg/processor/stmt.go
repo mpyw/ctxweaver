@@ -11,53 +11,61 @@ import (
 	"github.com/dave/dst/decorator"
 )
 
-// insertStatement inserts a statement at the beginning of a function body.
-func insertStatement(body *dst.BlockStmt, stmtStr string) bool {
-	stmt, err := parseStatement(stmtStr)
-	if err != nil {
+// insertStatements inserts statements at the beginning of a function body.
+func insertStatements(body *dst.BlockStmt, stmtStr string) bool {
+	stmts, err := parseStatements(stmtStr)
+	if err != nil || len(stmts) == 0 {
 		return false
 	}
 
-	// Add empty line after the statement
-	stmt.Decorations().After = dst.EmptyLine
+	// Add empty line after the last inserted statement
+	stmts[len(stmts)-1].Decorations().After = dst.EmptyLine
 
-	body.List = append([]dst.Stmt{stmt}, body.List...)
+	body.List = append(stmts, body.List...)
 	return true
 }
 
-// updateStatement updates a statement at the given index.
-func updateStatement(body *dst.BlockStmt, index int, stmtStr string) bool {
-	if index < 0 || index >= len(body.List) {
+// updateStatements updates statements starting at the given index.
+// It replaces `count` statements with the parsed statements from stmtStr.
+func updateStatements(body *dst.BlockStmt, index, count int, stmtStr string) bool {
+	if index < 0 || index >= len(body.List) || count <= 0 || index+count > len(body.List) {
 		return false
 	}
 
-	stmt, err := parseStatement(stmtStr)
-	if err != nil {
+	stmts, err := parseStatements(stmtStr)
+	if err != nil || len(stmts) == 0 {
 		return false
 	}
 
-	// Preserve Before and After decorations from the old statement
-	oldStmt := body.List[index]
-	stmt.Decorations().Before = oldStmt.Decorations().Before
-	stmt.Decorations().After = oldStmt.Decorations().After
+	// Preserve Before decoration from the first old statement
+	stmts[0].Decorations().Before = body.List[index].Decorations().Before
+	// Preserve After decoration from the last old statement
+	stmts[len(stmts)-1].Decorations().After = body.List[index+count-1].Decorations().After
 
-	body.List[index] = stmt
+	// Replace: body.List[:index] + stmts + body.List[index+count:]
+	newList := make([]dst.Stmt, 0, len(body.List)-count+len(stmts))
+	newList = append(newList, body.List[:index]...)
+	newList = append(newList, stmts...)
+	newList = append(newList, body.List[index+count:]...)
+	body.List = newList
+
 	return true
 }
 
-// removeStatement removes a statement at the given index.
-func removeStatement(body *dst.BlockStmt, index int) bool {
-	if index < 0 || index >= len(body.List) {
+// removeStatements removes `count` statements starting at the given index.
+func removeStatements(body *dst.BlockStmt, index, count int) bool {
+	if index < 0 || index >= len(body.List) || count <= 0 || index+count > len(body.List) {
 		return false
 	}
 
-	body.List = append(body.List[:index], body.List[index+1:]...)
+	body.List = append(body.List[:index], body.List[index+count:]...)
 	return true
 }
 
-// parseStatement parses a statement string into a DST statement.
-func parseStatement(stmtStr string) (dst.Stmt, error) {
-	// Wrap in a function to parse as a statement
+// parseStatements parses a statement string into DST statements.
+// Supports multiple statements separated by newlines.
+func parseStatements(stmtStr string) ([]dst.Stmt, error) {
+	// Wrap in a function to parse as statements
 	src := "package p\nfunc f() {\n" + stmtStr + "\n}"
 
 	fset := token.NewFileSet()
@@ -71,34 +79,34 @@ func parseStatement(stmtStr string) (dst.Stmt, error) {
 		return nil, err
 	}
 
-	// Extract the statement from the function body
+	// Extract the statements from the function body
 	funcDecl := df.Decls[0].(*dst.FuncDecl)
 	if len(funcDecl.Body.List) == 0 {
 		return nil, nil
 	}
 
-	// Get the last statement (or only statement)
-	lastIdx := len(funcDecl.Body.List) - 1
-	stmt := funcDecl.Body.List[lastIdx]
+	stmts := funcDecl.Body.List
 
 	// Trailing comments after the last statement end up in the function body's
 	// End decoration (before the closing brace). We need to capture these and
-	// attach them to the statement so they're preserved during insertion/update.
+	// attach them to the last statement so they're preserved during insertion/update.
 	if endComments := funcDecl.Body.Decs.End; len(endComments) > 0 {
+		lastStmt := stmts[len(stmts)-1]
 		for _, c := range endComments {
-			stmt.Decorations().End.Append(c)
+			lastStmt.Decorations().End.Append(c)
 		}
 	}
 
-	// For multi-line templates with multiple statements, we only return the first.
-	// The trailing comments have already been attached to the last statement above,
-	// but if there are multiple statements, we still only support the first.
-	// TODO: Support multi-statement insertion
-	if len(funcDecl.Body.List) > 1 {
-		return funcDecl.Body.List[0], nil
-	}
+	return stmts, nil
+}
 
-	return stmt, nil
+// stmtsToStrings converts DST statements to their string representations.
+func stmtsToStrings(stmts []dst.Stmt) []string {
+	result := make([]string, len(stmts))
+	for i, stmt := range stmts {
+		result[i] = stmtToString(stmt)
+	}
+	return result
 }
 
 // stmtToString converts a DST statement back to a string.

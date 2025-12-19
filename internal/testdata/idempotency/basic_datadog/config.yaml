@@ -1,0 +1,5 @@
+template: |
+  span, {{.CtxVar}} := tracer.StartSpanFromContext({{.Ctx}}, {{.FuncName | quote}})
+  defer span.Finish()
+imports:
+  - "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"

@@ -9,19 +9,34 @@ import (
 	"github.com/dave/dst/decorator"
 )
 
-func TestParseStatement(t *testing.T) {
+func TestParseStatements(t *testing.T) {
 	tests := map[string]struct {
-		input   string
-		wantErr bool
+		input     string
+		wantCount int
+		wantErr   bool
 	}{
-		"defer statement": {
-			input: `defer apm.StartSegment(ctx, "pkg.Func").End()`,
+		"single defer statement": {
+			input:     `defer apm.StartSegment(ctx, "pkg.Func").End()`,
+			wantCount: 1,
 		},
-		"assignment statement": {
-			input: `ctx, span := tracer.Start(ctx, "func")`,
+		"single assignment statement": {
+			input:     `ctx, span := tracer.Start(ctx, "func")`,
+			wantCount: 1,
 		},
-		"expression statement": {
-			input: `log.Info().Msg("hello")`,
+		"single expression statement": {
+			input:     `log.Info().Msg("hello")`,
+			wantCount: 1,
+		},
+		"two statements": {
+			input: `ctx, span := otel.Tracer("").Start(ctx, "test.Foo")
+defer span.End()`,
+			wantCount: 2,
+		},
+		"three statements": {
+			input: `txn := newrelic.FromContext(ctx)
+seg := txn.StartSegment("test.Foo")
+defer seg.End()`,
+			wantCount: 3,
 		},
 		"invalid statement": {
 			input:   `if {`,
@@ -31,110 +46,230 @@ func TestParseStatement(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			stmt, err := parseStatement(tt.input)
+			stmts, err := parseStatements(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseStatement() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("parseStatements() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantErr {
 				return
 			}
-			if stmt == nil {
-				t.Error("parseStatement() returned nil statement")
+			if len(stmts) != tt.wantCount {
+				t.Errorf("parseStatements() returned %d statements, want %d", len(stmts), tt.wantCount)
 			}
 		})
 	}
 }
 
-func TestInsertStatement(t *testing.T) {
-	body := &dst.BlockStmt{
-		List: []dst.Stmt{
-			&dst.ExprStmt{X: &dst.Ident{Name: "existing"}},
-		},
-	}
+func TestInsertStatements(t *testing.T) {
+	t.Run("single statement", func(t *testing.T) {
+		body := &dst.BlockStmt{
+			List: []dst.Stmt{
+				&dst.ExprStmt{X: &dst.Ident{Name: "existing"}},
+			},
+		}
 
-	stmt := `defer trace(ctx)`
-	if !insertStatement(body, stmt) {
-		t.Error("insertStatement() returned false")
-	}
+		stmt := `defer trace(ctx)`
+		if !insertStatements(body, stmt) {
+			t.Error("insertStatements() returned false")
+		}
 
-	if len(body.List) != 2 {
-		t.Errorf("body.List length = %d, want 2", len(body.List))
-	}
+		if len(body.List) != 2 {
+			t.Errorf("body.List length = %d, want 2", len(body.List))
+		}
 
-	// First statement should be the inserted one
-	def, ok := body.List[0].(*dst.DeferStmt)
-	if !ok {
-		t.Error("first statement is not a defer")
-	}
-	if def == nil {
-		t.Error("first statement is nil")
-	}
+		// First statement should be the inserted one
+		def, ok := body.List[0].(*dst.DeferStmt)
+		if !ok {
+			t.Error("first statement is not a defer")
+		}
+		if def == nil {
+			t.Error("first statement is nil")
+		}
+	})
+
+	t.Run("multiple statements", func(t *testing.T) {
+		body := &dst.BlockStmt{
+			List: []dst.Stmt{
+				&dst.ExprStmt{X: &dst.Ident{Name: "existing"}},
+			},
+		}
+
+		stmt := `ctx, span := otel.Tracer("").Start(ctx, "test.Foo")
+defer span.End()`
+		if !insertStatements(body, stmt) {
+			t.Error("insertStatements() returned false")
+		}
+
+		if len(body.List) != 3 {
+			t.Errorf("body.List length = %d, want 3", len(body.List))
+		}
+
+		// First statement should be assignment
+		_, ok := body.List[0].(*dst.AssignStmt)
+		if !ok {
+			t.Error("first statement is not an assignment")
+		}
+
+		// Second statement should be defer
+		_, ok = body.List[1].(*dst.DeferStmt)
+		if !ok {
+			t.Error("second statement is not a defer")
+		}
+	})
 }
 
-func TestUpdateStatement(t *testing.T) {
-	body := &dst.BlockStmt{
-		List: []dst.Stmt{
-			mustParseStmt(t, `defer apm.StartSegment(ctx, "old.Func").End()`),
-			&dst.ExprStmt{X: &dst.Ident{Name: "other"}},
-		},
-	}
+func TestUpdateStatements(t *testing.T) {
+	t.Run("single statement", func(t *testing.T) {
+		body := &dst.BlockStmt{
+			List: []dst.Stmt{
+				mustParseStmt(t, `defer apm.StartSegment(ctx, "old.Func").End()`),
+				&dst.ExprStmt{X: &dst.Ident{Name: "other"}},
+			},
+		}
 
-	stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-	if !updateStatement(body, 0, stmt) {
-		t.Error("updateStatement() returned false")
-	}
+		stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
+		if !updateStatements(body, 0, 1, stmt) {
+			t.Error("updateStatements() returned false")
+		}
 
-	if len(body.List) != 2 {
-		t.Errorf("body.List length = %d, want 2", len(body.List))
-	}
+		if len(body.List) != 2 {
+			t.Errorf("body.List length = %d, want 2", len(body.List))
+		}
 
-	// First statement should be updated
-	def, ok := body.List[0].(*dst.DeferStmt)
-	if !ok {
-		t.Fatal("first statement is not a defer")
-	}
-	if def == nil {
-		t.Fatal("first statement is nil")
-	}
+		// First statement should be updated
+		def, ok := body.List[0].(*dst.DeferStmt)
+		if !ok {
+			t.Fatal("first statement is not a defer")
+		}
+		if def == nil {
+			t.Fatal("first statement is nil")
+		}
+	})
+
+	t.Run("multiple statements", func(t *testing.T) {
+		body := &dst.BlockStmt{
+			List: []dst.Stmt{
+				mustParseStmt(t, `ctx, span := otel.Tracer("").Start(ctx, "old.Func")`),
+				mustParseStmt(t, `defer span.End()`),
+				&dst.ExprStmt{X: &dst.Ident{Name: "other"}},
+			},
+		}
+
+		stmt := `ctx, span := otel.Tracer("").Start(ctx, "new.Func")
+defer span.End()`
+		if !updateStatements(body, 0, 2, stmt) {
+			t.Error("updateStatements() returned false")
+		}
+
+		if len(body.List) != 3 {
+			t.Errorf("body.List length = %d, want 3", len(body.List))
+		}
+
+		// First statement should be assignment
+		_, ok := body.List[0].(*dst.AssignStmt)
+		if !ok {
+			t.Fatal("first statement is not an assignment")
+		}
+
+		// Second statement should be defer
+		_, ok = body.List[1].(*dst.DeferStmt)
+		if !ok {
+			t.Fatal("second statement is not a defer")
+		}
+	})
+
+	t.Run("replace more with fewer statements", func(t *testing.T) {
+		body := &dst.BlockStmt{
+			List: []dst.Stmt{
+				mustParseStmt(t, `a := 1`),
+				mustParseStmt(t, `b := 2`),
+				mustParseStmt(t, `c := 3`),
+				&dst.ExprStmt{X: &dst.Ident{Name: "other"}},
+			},
+		}
+
+		stmt := `x := 100`
+		if !updateStatements(body, 0, 3, stmt) {
+			t.Error("updateStatements() returned false")
+		}
+
+		if len(body.List) != 2 {
+			t.Errorf("body.List length = %d, want 2", len(body.List))
+		}
+	})
 }
 
-func TestRemoveStatement(t *testing.T) {
+func TestRemoveStatements(t *testing.T) {
 	tests := map[string]struct {
-		initialLen int
-		removeIdx  int
-		wantLen    int
-		wantResult bool
+		initialLen  int
+		removeIdx   int
+		removeCount int
+		wantLen     int
+		wantResult  bool
 	}{
-		"remove first": {
-			initialLen: 3,
-			removeIdx:  0,
-			wantLen:    2,
-			wantResult: true,
+		"remove first single": {
+			initialLen:  3,
+			removeIdx:   0,
+			removeCount: 1,
+			wantLen:     2,
+			wantResult:  true,
 		},
-		"remove middle": {
-			initialLen: 3,
-			removeIdx:  1,
-			wantLen:    2,
-			wantResult: true,
+		"remove middle single": {
+			initialLen:  3,
+			removeIdx:   1,
+			removeCount: 1,
+			wantLen:     2,
+			wantResult:  true,
 		},
-		"remove last": {
-			initialLen: 3,
-			removeIdx:  2,
-			wantLen:    2,
-			wantResult: true,
+		"remove last single": {
+			initialLen:  3,
+			removeIdx:   2,
+			removeCount: 1,
+			wantLen:     2,
+			wantResult:  true,
+		},
+		"remove first two": {
+			initialLen:  4,
+			removeIdx:   0,
+			removeCount: 2,
+			wantLen:     2,
+			wantResult:  true,
+		},
+		"remove middle two": {
+			initialLen:  4,
+			removeIdx:   1,
+			removeCount: 2,
+			wantLen:     2,
+			wantResult:  true,
 		},
 		"invalid index negative": {
-			initialLen: 3,
-			removeIdx:  -1,
-			wantLen:    3,
-			wantResult: false,
+			initialLen:  3,
+			removeIdx:   -1,
+			removeCount: 1,
+			wantLen:     3,
+			wantResult:  false,
 		},
 		"invalid index too large": {
-			initialLen: 3,
-			removeIdx:  3,
-			wantLen:    3,
-			wantResult: false,
+			initialLen:  3,
+			removeIdx:   3,
+			removeCount: 1,
+			wantLen:     3,
+			wantResult:  false,
+		},
+		"invalid count exceeds bounds": {
+			initialLen:  3,
+			removeIdx:   1,
+			removeCount: 3,
+			wantLen:     3,
+			wantResult:  false,
+		},
+		"invalid count zero": {
+			initialLen:  3,
+			removeIdx:   0,
+			removeCount: 0,
+			wantLen:     3,
+			wantResult:  false,
 		},
 	}
 
@@ -146,14 +281,34 @@ func TestRemoveStatement(t *testing.T) {
 				body.List[i] = &dst.ExprStmt{X: &dst.Ident{Name: "stmt"}}
 			}
 
-			got := removeStatement(body, tt.removeIdx)
+			got := removeStatements(body, tt.removeIdx, tt.removeCount)
 			if got != tt.wantResult {
-				t.Errorf("removeStatement() = %v, want %v", got, tt.wantResult)
+				t.Errorf("removeStatements() = %v, want %v", got, tt.wantResult)
 			}
 			if len(body.List) != tt.wantLen {
 				t.Errorf("body.List length = %d, want %d", len(body.List), tt.wantLen)
 			}
 		})
+	}
+}
+
+func TestStmtsToStrings(t *testing.T) {
+	stmts := []dst.Stmt{
+		mustParseStmt(t, `x := 1`),
+		mustParseStmt(t, `defer foo()`),
+	}
+
+	result := stmtsToStrings(stmts)
+
+	if len(result) != 2 {
+		t.Fatalf("stmtsToStrings() returned %d strings, want 2", len(result))
+	}
+
+	if result[0] != "x := 1" {
+		t.Errorf("stmtsToStrings()[0] = %q, want %q", result[0], "x := 1")
+	}
+	if result[1] != "defer foo()" {
+		t.Errorf("stmtsToStrings()[1] = %q, want %q", result[1], "defer foo()")
 	}
 }
 

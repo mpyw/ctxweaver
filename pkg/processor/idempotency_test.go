@@ -195,7 +195,7 @@ func TestIdempotency_TemplateChange_SkeletonMode(t *testing.T) {
 		t.Fatalf("failed to create carrier registry: %v", err)
 	}
 
-	before := readTestdataFile(t, "basic", "before.go")
+	before := readTestdataFile(t, "basic_newrelic", "before.go")
 
 	// First template
 	tmpl1, _ := template.Parse(`defer trace1({{.Ctx}}, {{.FuncName | quote}})`)
@@ -235,7 +235,7 @@ func TestRemove_Basic(t *testing.T) {
 
 	// First, add instrumentation
 	insertProc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-	before := readTestdataFile(t, "basic", "before.go")
+	before := readTestdataFile(t, "basic_newrelic", "before.go")
 
 	instrumented, err := insertProc.TransformSource(before, "test")
 	if err != nil {
@@ -311,7 +311,7 @@ func TestRemove_PreservesOtherCode(t *testing.T) {
 func TestRemove_DifferentTemplate(t *testing.T) {
 	registry, _ := config.NewCarrierRegistry()
 
-	before := readTestdataFile(t, "basic", "before.go")
+	before := readTestdataFile(t, "basic_newrelic", "before.go")
 
 	// Add instrumentation with template 1
 	tmpl1, _ := template.Parse(`defer trace1({{.Ctx}}, {{.FuncName | quote}})`)

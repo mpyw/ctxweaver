@@ -1,0 +1,13 @@
+template: |
+  // ==================================================
+  // ctxweaver: auto-generated tracing code
+  // DO NOT EDIT - this block is managed by ctxweaver
+  // ==================================================
+  txn := newrelic.FromContext({{.Ctx}}) // Extract transaction from context
+  seg := txn.StartSegment({{.FuncName | quote}}) // Start a new segment
+  defer seg.End() // End the segment when function returns
+  // ==================================================
+  // End of ctxweaver generated code
+  // ==================================================
+imports:
+  - github.com/newrelic/go-agent/v3/newrelic

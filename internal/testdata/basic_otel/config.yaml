@@ -1,0 +1,5 @@
+template: |
+  {{.CtxVar}}, span := otel.Tracer("").Start({{.Ctx}}, {{.FuncName | quote}})
+  defer span.End()
+imports:
+  - "go.opentelemetry.io/otel"
