@@ -54,7 +54,7 @@ func isMajorVersionSuffix(s string) bool {
 
 func hasSkipDirective(decs *dst.NodeDecs) bool {
 	for _, c := range decs.Start.All() {
-		if strings.Contains(c, "ctxweaver:skip") || strings.Contains(c, "DO NOT EDIT") {
+		if strings.Contains(c, "ctxweaver:skip") {
 			return true
 		}
 	}
