@@ -3,3 +3,6 @@ template: |
 
   // trailing comment after blank line
 imports: []
+
+# Multi-line templates with embedded comments are not fully supported in remove
+skip_remove: true

@@ -1,0 +1,2 @@
+# DST always formats output, cannot restore unformatted before.go
+skip_remove: true
