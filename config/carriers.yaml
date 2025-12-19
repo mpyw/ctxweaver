@@ -1,0 +1,36 @@
+carriers:
+  # Standard library
+  - package: context
+    type: Context
+    accessor: ""
+
+  # Echo - High performance web framework
+  - package: github.com/labstack/echo/v4
+    type: Context
+    accessor: .Request().Context()
+
+  # urfave/cli - CLI application framework
+  - package: github.com/urfave/cli/v2
+    type: Context
+    accessor: .Context
+
+  # Cobra - CLI commander
+  - package: github.com/spf13/cobra
+    type: Command
+    accessor: .Context()
+
+  # Gin - HTTP web framework
+  - package: github.com/gin-gonic/gin
+    type: Context
+    accessor: .Request.Context()
+
+  # Fiber - Express-inspired web framework
+  - package: github.com/gofiber/fiber/v2
+    type: Ctx
+    accessor: .Context()
+
+  # Chi - Lightweight router
+  # Note: chi uses standard context.Context, no special carrier needed
+
+  # gRPC - Uses standard context.Context
+  # Note: no special carrier needed

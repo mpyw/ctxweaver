@@ -43,7 +43,7 @@ The inserted statement is fully customizable via Go templates.
 
 ```bash
 go install github.com/mpyw/ctxweaver/cmd/ctxweaver@latest
-ctxweaver -template='defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()' ./...
+ctxweaver ./...
 ```
 
 ### Using [`go tool`](https://pkg.go.dev/cmd/go#hdr-Run_specified_go_tool) (Go 1.24+)
@@ -53,49 +53,61 @@ ctxweaver -template='defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End
 go get -tool github.com/mpyw/ctxweaver/cmd/ctxweaver@latest
 
 # Run via go tool
-go tool ctxweaver -template='...' ./...
+go tool ctxweaver ./...
 ```
 
 ### Using [`go run`](https://pkg.go.dev/cmd/go#hdr-Compile_and_run_Go_program)
 
 ```bash
-go run github.com/mpyw/ctxweaver/cmd/ctxweaver@latest -template='...' ./...
+go run github.com/mpyw/ctxweaver/cmd/ctxweaver@latest ./...
 ```
 
 > [!CAUTION]
 > To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.1.0`).
 
+## Configuration
+
+ctxweaver uses a YAML configuration file. Create `ctxweaver.yaml` in your project root:
+
+```yaml
+# ctxweaver.yaml
+template: |
+  defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+
+imports:
+  - github.com/example/myapp/internal/apm
+
+patterns:
+  - ./...
+
+test: false
+```
+
+See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example with all options.
+
 ## Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-template` | (required) | Go template for the statement to insert |
-| `-template-file` | | Path to a file containing the template (alternative to `-template`) |
-| `-import` | | Import to add (format: `path` or `alias=path`), can be repeated |
-| `-context-carrier` | | Additional types to treat as context carriers (see below) |
-| `-test` | `false` | Process test files (`*_test.go`) |
+| `-config` | `ctxweaver.yaml` | Path to configuration file |
 | `-dry-run` | `false` | Print changes without writing files |
 | `-verbose` | `false` | Print processed files |
+| `-test` | `false` | Process test files (`*_test.go`) |
 
-### Target Specification
-
-ctxweaver accepts Go package patterns as arguments:
-
-```bash
-# Process all packages recursively
-ctxweaver -template='...' ./...
-
-# Process specific packages
-ctxweaver -template='...' ./pkg/service ./pkg/repository
-
-# Process by import path
-ctxweaver -template='...' github.com/example/myapp/...
-```
-
-Alternatively, use file glob patterns with `-files`:
+### Examples
 
 ```bash
-ctxweaver -template='...' -files='pkg/**/*.go,internal/**/*.go'
+# Use default config file (ctxweaver.yaml)
+ctxweaver ./...
+
+# Use custom config file
+ctxweaver -config=.ctxweaver.yaml ./...
+
+# Dry run - preview changes
+ctxweaver -dry-run -verbose ./...
+
+# Include test files
+ctxweaver -test ./...
 ```
 
 ## Template System
@@ -125,67 +137,52 @@ ctxweaver -template='...' -files='pkg/**/*.go,internal/**/*.go'
 ### Examples
 
 **APM Tracing (New Relic style)**
-```bash
-ctxweaver \
-  -template='defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()' \
-  -import='github.com/example/myapp/internal/apm' \
-  ./...
+```yaml
+template: |
+  defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+imports:
+  - github.com/example/myapp/internal/apm
 ```
 
 **OpenTelemetry Spans**
-```bash
-ctxweaver \
-  -template='{{.CtxVar}}, span := tracer.Start({{.Ctx}}, {{.FuncName | quote}}); defer span.End()' \
-  -import='go.opentelemetry.io/otel/trace' \
-  ./...
-```
-
-**Structured Logging**
-```bash
-ctxweaver \
-  -template='log := zerolog.Ctx({{.Ctx}}).With().Str("func", {{.FuncName | quote}}).Logger()' \
-  -import='github.com/rs/zerolog' \
-  ./...
+```yaml
+template: |
+  {{.CtxVar}}, span := otel.Tracer("myapp").Start({{.Ctx}}, {{.FuncName | quote}}); defer span.End()
+imports:
+  - go.opentelemetry.io/otel
 ```
 
 **Multi-line Template (via file)**
-```go
-// template.txt
-{{.CtxVar}}, span := otel.Tracer("myapp").Start({{.Ctx}}, {{.FuncName | quote}})
-defer span.End()
+```yaml
+template_file: ./templates/otel.tmpl
+imports:
+  - go.opentelemetry.io/otel
+  - go.opentelemetry.io/otel/attribute
 ```
 
-```bash
-ctxweaver -template-file=template.txt ./...
+## Built-in Context Carriers
+
+ctxweaver recognizes the following types as context carriers (checks the **first parameter** only):
+
+| Type | Accessor | Notes |
+|------|----------|-------|
+| `context.Context` | (none) | Standard library |
+| `echo.Context` | `.Request().Context()` | Echo framework |
+| `*cli.Context` | `.Context` | urfave/cli |
+| `*cobra.Command` | `.Context()` | Cobra |
+| `*gin.Context` | `.Request.Context()` | Gin |
+| `*fiber.Ctx` | `.Context()` | Fiber |
+
+### Custom Carriers
+
+Add custom carriers in your config file:
+
+```yaml
+carriers:
+  - package: github.com/example/myapp/pkg/web
+    type: Context
+    accessor: .Ctx()
 ```
-
-## Context Carriers
-
-By default, ctxweaver recognizes `context.Context` as a context type. You can add additional types that carry context:
-
-```bash
-ctxweaver \
-  -template='...' \
-  -context-carrier='github.com/labstack/echo/v4.Context=.Request().Context()' \
-  -context-carrier='github.com/urfave/cli/v2.Context=.Context' \
-  -context-carrier='github.com/spf13/cobra.Command=.Context()' \
-  ./...
-```
-
-**Format**: `package/path.TypeName=.accessor`
-
-- The accessor is appended to the parameter variable to get `context.Context`
-- For `context.Context` itself, the accessor is empty (just the variable name)
-- Pointer types are automatically handled (`*cli.Context` matches `cli.Context` carrier)
-
-### How Accessors Work
-
-| Carrier Type | Accessor | `{{.Ctx}}` becomes |
-|--------------|----------|-------------------|
-| `context.Context` | (none) | `ctx` |
-| `echo.Context` | `.Request().Context()` | `ctx.Request().Context()` |
-| `*cli.Context` | `.Context` | `ctx.Context` |
-| `*cobra.Command` | `.Context()` | `cmd.Context()` |
 
 ## Directives
 
@@ -210,7 +207,7 @@ package legacy
 // All functions in this file will be skipped
 ```
 
-### Existing Statement Detection
+## Existing Statement Detection
 
 ctxweaver detects if a matching statement already exists and:
 
@@ -218,43 +215,22 @@ ctxweaver detects if a matching statement already exists and:
 2. **Updates** if the function name in the statement doesn't match (e.g., after rename)
 3. **Inserts** if no matching statement exists
 
-Detection is based on pattern matching the template structure, not exact string comparison.
+Currently, detection is specific to the `defer XXX.StartSegment(ctx, "name").End()` pattern.
 
 ## Performance
 
 ctxweaver uses `golang.org/x/tools/go/packages` to load type information efficiently:
 
 - **Single load**: All target packages are loaded in one pass
-- **Parallel processing**: Files are processed concurrently
-- **Incremental friendly**: Only modified files are written
-
-For large codebases, consider using file patterns to limit scope:
-
-```bash
-# Process only specific directories
-ctxweaver -template='...' -files='pkg/api/**/*.go'
-```
+- **Accurate type resolution**: Import paths are resolved correctly via type information
+- **Comment preservation**: Uses DST (Decorated Syntax Tree) to preserve comments
 
 ## Import Management
 
-ctxweaver automatically:
-
-1. **Adds imports** specified via `-import` flag when the template uses them
-2. **Preserves existing imports** and their aliases
-3. **Maintains import grouping** (stdlib, external, local)
+ctxweaver automatically adds imports specified in the config file when statements are inserted.
 
 > [!NOTE]
 > ctxweaver does not reorder or reformat existing imports. Use `goimports` or `gci` after ctxweaver if you need consistent import formatting.
-
-## Comparison with Other Tools
-
-| Feature | ctxweaver | Manual coding | go generate |
-|---------|-----------|---------------|-------------|
-| Automatic insertion | Yes | No | Partial |
-| Keeps code in sync | Yes | No | No |
-| Custom templates | Yes | N/A | Yes |
-| Type-aware | Yes | N/A | No |
-| Preserves comments | Yes | Yes | Varies |
 
 ## Development
 
@@ -266,7 +242,7 @@ go test ./...
 go build -o bin/ctxweaver ./cmd/ctxweaver
 
 # Run on a project
-./bin/ctxweaver -template='...' ./...
+./bin/ctxweaver -config=ctxweaver.yaml ./...
 ```
 
 ## License

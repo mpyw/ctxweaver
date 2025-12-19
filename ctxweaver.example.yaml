@@ -1,0 +1,49 @@
+# ctxweaver configuration example
+# Copy this file to ctxweaver.yaml and customize for your project
+
+# Template for the statement to insert at the beginning of context-aware functions.
+# Available variables:
+#   {{.Ctx}}              - Expression to access context.Context (e.g., "ctx", "c.Request().Context()")
+#   {{.CtxVar}}           - Name of the context parameter variable (e.g., "ctx", "c")
+#   {{.FuncName}}         - Fully qualified function name (e.g., "(*pkg.Service).Method")
+#   {{.PackageName}}      - Package name (e.g., "service")
+#   {{.PackagePath}}      - Full import path (e.g., "github.com/example/myapp/pkg/service")
+#   {{.FuncBaseName}}     - Function name without package/receiver (e.g., "Method")
+#   {{.ReceiverType}}     - Receiver type name (empty if not a method)
+#   {{.ReceiverVar}}      - Receiver variable name (empty if not a method)
+#   {{.IsMethod}}         - Whether this is a method (bool)
+#   {{.IsPointerReceiver}} - Whether the receiver is a pointer (bool)
+#
+# Built-in functions:
+#   {{.FuncName | quote}}    - Wrap in double quotes
+#   {{.FuncName | backtick}} - Wrap in backticks
+template: |
+  defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+
+# Alternative: load template from a file
+# template_file: ./templates/apm.tmpl
+
+# Imports to add when the statement is inserted
+imports:
+  - github.com/example/myapp/internal/apm
+
+# Additional context carrier types (built-in carriers are always included)
+# Built-in carriers:
+#   - context.Context (accessor: "")
+#   - github.com/labstack/echo/v4.Context (accessor: ".Request().Context()")
+#   - github.com/urfave/cli/v2.Context (accessor: ".Context")
+#   - github.com/spf13/cobra.Command (accessor: ".Context()")
+#   - github.com/gin-gonic/gin.Context (accessor: ".Request.Context()")
+#   - github.com/gofiber/fiber/v2.Ctx (accessor: ".Context()")
+carriers:
+  # Example: custom context wrapper
+  # - package: github.com/example/myapp/pkg/web
+  #   type: Context
+  #   accessor: .Ctx()
+
+# Package patterns to process (can also be specified as CLI arguments)
+patterns:
+  - ./...
+
+# Whether to process test files (*_test.go)
+test: false
