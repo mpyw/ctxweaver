@@ -58,17 +58,20 @@ carriers:
     type: "Request"
     accessor: ".Ctx"  # Field access instead of method call
 
-# Shell commands to run before processing.
-# Commands are executed sequentially. If any command fails (non-zero exit),
-# processing is aborted and no files are modified.
-pre:
-  - "go mod tidy"
-  - "echo 'Starting ctxweaver...'"
+# Shell commands to run before and after processing.
+# Use --no-hooks flag to skip hooks (useful for CI).
+hooks:
+  # Commands to run before processing.
+  # Commands are executed sequentially. If any command fails (non-zero exit),
+  # processing is aborted and no files are modified.
+  pre:
+    - "go mod tidy"
+    - "echo 'Starting ctxweaver...'"
 
-# Shell commands to run after processing.
-# Commands are executed sequentially. If any command fails (non-zero exit),
-# an error is reported but files have already been modified.
-post:
-  - "gci write ."
-  - "gofmt -w ."
-  - "golangci-lint run --fix"
+  # Commands to run after processing.
+  # Commands are executed sequentially. If any command fails (non-zero exit),
+  # an error is reported but files have already been modified.
+  post:
+    - "gci write ."
+    - "gofmt -w ."
+    - "golangci-lint run --fix"

@@ -1,86 +1,76 @@
 # ctxweaver configuration example
-# Copy this file to ctxweaver.yaml and customize for your project
+# Copy this file to ctxweaver.yaml and customize for your project.
 
 # Template for the statement to insert at the beginning of context-aware functions.
+# Supports Go text/template syntax with the following variables:
+#   - {{.Ctx}}               : Expression to access context.Context (e.g., "ctx", "c.Request().Context()")
+#   - {{.CtxVar}}            : The variable name of the context carrier (e.g., "ctx", "c")
+#   - {{.FuncName}}          : Fully qualified function name (e.g., "pkg.Func", "pkg.(*Type).Method")
+#   - {{.FuncBaseName}}      : Function name without package/receiver (e.g., "Func", "Method")
+#   - {{.PackageName}}       : Package name (e.g., "pkg")
+#   - {{.PackagePath}}       : Full package path (e.g., "github.com/user/repo/pkg")
+#   - {{.IsMethod}}          : true if the function is a method
+#   - {{.ReceiverType}}      : Receiver type name for methods (e.g., "MyService")
+#   - {{.ReceiverVar}}       : Receiver variable name for methods (e.g., "s")
+#   - {{.IsPointerReceiver}} : true if the receiver is a pointer
 #
-# Available variables:
-#   {{.Ctx}}               - Expression to access context.Context (e.g., "ctx", "c.Request().Context()")
-#   {{.CtxVar}}            - Name of the context parameter variable (e.g., "ctx", "c")
-#   {{.FuncName}}          - Fully qualified function name (e.g., "service.(*UserService).GetByID")
-#   {{.PackageName}}       - Package name (e.g., "service")
-#   {{.PackagePath}}       - Full import path (e.g., "github.com/example/myapp/pkg/service")
-#   {{.FuncBaseName}}      - Function name without package/receiver (e.g., "GetByID")
-#   {{.ReceiverType}}      - Receiver type name (empty if not a method)
-#   {{.ReceiverVar}}       - Receiver variable name (empty if not a method)
-#   {{.IsMethod}}          - Whether this is a method (bool)
-#   {{.IsPointerReceiver}} - Whether the receiver is a pointer (bool)
-#
-# Built-in functions:
-#   {{.FuncName | quote}}    - Wrap in double quotes
-#   {{.FuncName | backtick}} - Wrap in backticks
+# Built-in template functions:
+#   - quote    : Wraps value in double quotes (e.g., {{.FuncName | quote}} -> "pkg.Func")
+#   - backtick : Wraps value in backticks (e.g., {{.FuncName | backtick}} -> `pkg.Func`)
 #
 # FuncName format examples:
 #   - Function:                  "service.CreateUser"
 #   - Method (pointer receiver): "service.(*UserService).GetByID"
 #   - Method (value receiver):   "service.UserService.String"
-
-# ------------------------------------------------------------------------------
-# Example 1: Simple - Using {{.FuncName}} (recommended)
-# ------------------------------------------------------------------------------
 template: |
   defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()
 
+# Alternative: Load template from a file instead of inline.
+# If both template and template_file are specified, template takes precedence.
+# template_file: ./template.go.tmpl
+
+# Imports to add when the template is inserted.
+# These are automatically added via goimports when a function is instrumented.
 imports:
   - github.com/newrelic/go-agent/v3/newrelic
 
-# ------------------------------------------------------------------------------
-# Example 2: Custom function name format using template variables
-# ------------------------------------------------------------------------------
-# If you need a different naming format, you can build it yourself:
-#
-# template: |
-#   {{- $name := "" -}}
-#   {{- if .IsMethod -}}
-#     {{- if .IsPointerReceiver -}}
-#       {{- $name = printf "%s.(*%s).%s" .PackageName .ReceiverType .FuncBaseName -}}
-#     {{- else -}}
-#       {{- $name = printf "%s.%s.%s" .PackageName .ReceiverType .FuncBaseName -}}
-#     {{- end -}}
-#   {{- else -}}
-#     {{- $name = printf "%s.%s" .PackageName .FuncBaseName -}}
-#   {{- end -}}
-#   defer newrelic.FromContext({{.Ctx}}).StartSegment({{$name | quote}}).End()
-
-# ------------------------------------------------------------------------------
-# Example 3: OpenTelemetry style
-# ------------------------------------------------------------------------------
-# template: |
-#   {{.CtxVar}}, span := otel.Tracer({{.PackageName | quote}}).Start({{.Ctx}}, {{.FuncName | quote}})
-#   defer span.End()
-#
-# imports:
-#   - go.opentelemetry.io/otel
-
-# ------------------------------------------------------------------------------
-# Additional context carrier types (built-in carriers are always included)
-# ------------------------------------------------------------------------------
-# Built-in carriers:
-#   - context.Context                      (accessor: "")
-#   - github.com/labstack/echo/v4.Context  (accessor: ".Request().Context()")
-#   - github.com/urfave/cli/v2.Context     (accessor: ".Context")
-#   - github.com/spf13/cobra.Command       (accessor: ".Context()")
-#   - github.com/gin-gonic/gin.Context     (accessor: ".Request.Context()")
-#   - github.com/gofiber/fiber/v2.Ctx      (accessor: ".Context()")
-#
-carriers:
-  # Example: custom context wrapper
-  # - package: github.com/example/myapp/pkg/web
-  #   type: Context
-  #   accessor: .Ctx()
-
-# Package patterns to process (can also be specified as CLI arguments)
+# Package patterns to process.
+# Uses the same syntax as `go list` (e.g., "./...", "./pkg/...", "github.com/user/repo/...").
+# Can be overridden by command-line arguments.
 patterns:
   - ./...
 
-# Whether to process test files (*_test.go)
+# Whether to process test files (*_test.go).
+# Can be overridden by --test flag.
 test: false
+
+# Custom context carrier definitions.
+# ctxweaver comes with built-in support for common carriers:
+#   - context.Context
+#   - echo.Context (github.com/labstack/echo/v4)
+#   - gin.Context (github.com/gin-gonic/gin)
+#   - fiber.Ctx (github.com/gofiber/fiber/v2)
+#   - cli.Context (github.com/urfave/cli/v2)
+#   - *cobra.Command (github.com/spf13/cobra)
+#
+# Add custom carriers here for your own types that wrap context.Context.
+carriers:
+  # - package: github.com/example/myframework
+  #   type: Context
+  #   accessor: .Context()  # How to extract context.Context from this type
+
+# Shell commands to run before and after processing.
+# Use --no-hooks flag to skip hooks (useful for CI).
+hooks:
+  # Commands to run before processing.
+  # Commands are executed sequentially. If any command fails (non-zero exit),
+  # processing is aborted and no files are modified.
+  pre:
+    - go mod tidy
+
+  # Commands to run after processing.
+  # Commands are executed sequentially. If any command fails (non-zero exit),
+  # an error is reported but files have already been modified.
+  post:
+    - gci write .
+    - gofmt -w .

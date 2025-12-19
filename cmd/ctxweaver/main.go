@@ -38,6 +38,7 @@ func run() error {
 		silent     bool
 		test       bool
 		remove     bool
+		noHooks    bool
 	)
 
 	flag.StringVar(&configFile, "config", "ctxweaver.yaml", "path to configuration file")
@@ -46,6 +47,7 @@ func run() error {
 	flag.BoolVar(&silent, "silent", false, "suppress all output except errors")
 	flag.BoolVar(&test, "test", false, "process test files")
 	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
+	flag.BoolVar(&noHooks, "no-hooks", false, "skip pre/post hooks")
 	flag.Parse()
 
 	// Load configuration
@@ -74,8 +76,8 @@ func run() error {
 	}
 
 	// Run pre hooks
-	if len(cfg.Pre) > 0 {
-		if err := runHooks("pre", cfg.Pre, silent); err != nil {
+	if !noHooks && len(cfg.Hooks.Pre) > 0 {
+		if err := runHooks("pre", cfg.Hooks.Pre, silent); err != nil {
 			return err
 		}
 	}
@@ -139,8 +141,8 @@ func run() error {
 	}
 
 	// Run post hooks
-	if len(cfg.Post) > 0 {
-		if err := runHooks("post", cfg.Post, silent); err != nil {
+	if !noHooks && len(cfg.Hooks.Post) > 0 {
+		if err := runHooks("post", cfg.Hooks.Post, silent); err != nil {
 			return err
 		}
 	}

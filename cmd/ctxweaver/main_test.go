@@ -224,8 +224,9 @@ func Foo(ctx context.Context) {
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
 patterns: []
-pre:
-  - "exit 1"
+hooks:
+  pre:
+    - "exit 1"
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)

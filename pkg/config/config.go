@@ -24,6 +24,14 @@ type CarriersFile struct {
 	Carriers []CarrierDef `yaml:"carriers"`
 }
 
+// Hooks defines shell commands to run before and after processing.
+type Hooks struct {
+	// Pre are shell commands to run before processing
+	Pre []string `yaml:"pre"`
+	// Post are shell commands to run after processing
+	Post []string `yaml:"post"`
+}
+
 // Config represents the user configuration file.
 type Config struct {
 	// Template is the Go template for the statement to insert
@@ -38,10 +46,8 @@ type Config struct {
 	Patterns []string `yaml:"patterns"`
 	// Test indicates whether to process test files
 	Test bool `yaml:"test"`
-	// Pre are shell commands to run before processing
-	Pre []string `yaml:"pre"`
-	// Post are shell commands to run after processing
-	Post []string `yaml:"post"`
+	// Hooks are shell commands to run before and after processing
+	Hooks Hooks `yaml:"hooks"`
 }
 
 // CarrierRegistry holds all registered carriers for quick lookup.
