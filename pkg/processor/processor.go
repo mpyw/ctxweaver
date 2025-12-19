@@ -110,7 +110,16 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 			continue
 		}
 
+		// Skip if no files to process (can happen with empty packages)
+		if len(pkg.Syntax) == 0 || len(pkg.CompiledGoFiles) == 0 {
+			continue
+		}
+
 		for i, file := range pkg.Syntax {
+			// Safety check: ensure index is valid
+			if i >= len(pkg.CompiledGoFiles) {
+				continue
+			}
 			filename := pkg.CompiledGoFiles[i]
 
 			if !p.shouldProcessFile(filename) {
