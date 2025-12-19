@@ -1,281 +1,201 @@
 package processor_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"gopkg.in/yaml.v3"
 
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/processor"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
-// TestIdempotency_EdgeCases tests various edge cases for idempotency.
-// These tests ensure that running ctxweaver multiple times produces stable results.
-func TestIdempotency_EdgeCases(t *testing.T) {
-	testCases := map[string]struct {
-		template string
-		imports  []string
-		before   string
-		pkgName  string
-	}{
-		// === Basic Cases ===
-		"simple_defer": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Multi-line Templates ===
-		"multiline_func_literal": {
-			template: `defer func() {
-	txn := newrelic.FromContext({{.Ctx}})
-	defer txn.StartSegment({{.FuncName | quote}}).End()
-}()`,
-			imports: []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === If Statement Templates ===
-		"if_statement": {
-			template: `if txn := newrelic.FromContext({{.Ctx}}); txn != nil {
-	defer txn.StartSegment({{.FuncName | quote}}).End()
-}`,
-			imports: []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Simple Function Call ===
-		"simple_call": {
-			template: `trace.Start({{.Ctx}}, {{.FuncName | quote}})`,
-			imports:  []string{"mytrace"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Variable Assignment ===
-		"assignment": {
-			template: `span, _ := tracer.StartSpanFromContext({{.Ctx}}, {{.FuncName | quote}})
-defer span.Finish()`,
-			imports: []string{"opentracing"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Existing Code with Comments ===
-		"with_existing_comment": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	// Important business logic below
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Method with Pointer Receiver ===
-		"method_pointer_receiver": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-type Service struct{}
-func (s *Service) Do(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Method with Value Receiver ===
-		"method_value_receiver": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-type Handler struct{}
-func (h Handler) Handle(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Different Context Variable Name ===
-		"different_ctx_var_name": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(c context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
-
-		// === Multiple Functions in One File ===
-		"multiple_functions": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
+// testConfig holds test-specific configuration from config.yaml
+type testConfig struct {
+	Template string   `yaml:"template"`
+	Imports  []string `yaml:"imports"`
 }
-func Bar(ctx context.Context) error {
-	return nil
-}
-func Baz(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
 
-		// === Complex Nested Structure ===
-		"complex_body": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func Foo(ctx context.Context) error {
-	if true {
-		for i := 0; i < 10; i++ {
-			switch i {
-			case 1:
+// defaultConfig returns the default newrelic template config
+func defaultConfig() testConfig {
+	return testConfig{
+		Template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
+		Imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
+	}
+}
+
+// loadTestConfig loads config.yaml from dir or returns default
+func loadTestConfig(dir string) testConfig {
+	configPath := filepath.Join(dir, "config.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return defaultConfig()
+	}
+
+	var cfg testConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return defaultConfig()
+	}
+	return cfg
+}
+
+// TestIdempotency_FromTestdata tests idempotency using testdata files.
+// Each subdirectory in testdata/idempotency/ contains a before.go and optional config.yaml.
+func TestIdempotency_FromTestdata(t *testing.T) {
+	testdataRoot := filepath.Join("..", "..", "internal", "testdata", "idempotency")
+
+	// Walk testdata/idempotency directory
+	entries, err := os.ReadDir(testdataRoot)
+	if err != nil {
+		t.Fatalf("failed to read testdata: %v", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		testDir := filepath.Join(testdataRoot, entry.Name())
+
+		// Check for nested test directories (e.g., trailing_newlines/no_trailing)
+		subEntries, err := os.ReadDir(testDir)
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", testDir, err)
+		}
+
+		hasBeforeGo := false
+		for _, sub := range subEntries {
+			if sub.Name() == "before.go" {
+				hasBeforeGo = true
 				break
 			}
 		}
+
+		if hasBeforeGo {
+			// Single test case
+			runIdempotencyTest(t, entry.Name(), testDir)
+		} else {
+			// Nested test cases
+			for _, sub := range subEntries {
+				if !sub.IsDir() {
+					continue
+				}
+				subDir := filepath.Join(testDir, sub.Name())
+				testName := entry.Name() + "/" + sub.Name()
+				runIdempotencyTest(t, testName, subDir)
+			}
+		}
 	}
-	return nil
-}`,
-			pkgName: "test",
-		},
+}
 
-		// === Blank Lines Preservation ===
-		"blank_lines": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
+func runIdempotencyTest(t *testing.T, name, dir string) {
+	t.Run(name, func(t *testing.T) {
+		beforePath := filepath.Join(dir, "before.go")
+		before, err := os.ReadFile(beforePath)
+		if err != nil {
+			t.Fatalf("failed to read before.go: %v", err)
+		}
 
-import "context"
+		cfg := loadTestConfig(dir)
 
-func Foo(ctx context.Context) error {
+		registry, err := config.NewCarrierRegistry()
+		if err != nil {
+			t.Fatalf("failed to create carrier registry: %v", err)
+		}
 
-	// Some comment
+		tmpl, err := template.Parse(cfg.Template)
+		if err != nil {
+			t.Fatalf("failed to parse template: %v", err)
+		}
 
-	return nil
-}`,
-			pkgName: "test",
-		},
+		proc := processor.New(registry, tmpl, cfg.Imports)
 
-		// === Unicode in Function Name ===
-		"unicode_package": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			imports:  []string{"github.com/newrelic/go-agent/v3/newrelic"},
-			before: `package test
-import "context"
-func 処理(ctx context.Context) error {
-	return nil
-}`,
-			pkgName: "test",
-		},
+		// First transformation
+		first, err := proc.TransformSource(before, "test")
+		if err != nil {
+			t.Fatalf("first transform failed: %v", err)
+		}
+
+		// Second transformation (should be stable)
+		second, err := proc.TransformSource(first, "test")
+		if err != nil {
+			t.Fatalf("second transform failed: %v", err)
+		}
+
+		// Third transformation (should still be stable)
+		third, err := proc.TransformSource(second, "test")
+		if err != nil {
+			t.Fatalf("third transform failed: %v", err)
+		}
+
+		if diff := cmp.Diff(string(first), string(second)); diff != "" {
+			t.Errorf("NOT IDEMPOTENT (first vs second):\n%s", diff)
+		}
+
+		if diff := cmp.Diff(string(second), string(third)); diff != "" {
+			t.Errorf("NOT STABLE (second vs third):\n%s", diff)
+		}
+	})
+}
+
+// TestGeneratedFiles_FromTestdata tests that generated files are skipped.
+func TestGeneratedFiles_FromTestdata(t *testing.T) {
+	testdataRoot := filepath.Join("..", "..", "internal", "testdata", "idempotency", "generated_files")
+
+	entries, err := os.ReadDir(testdataRoot)
+	if err != nil {
+		t.Fatalf("failed to read testdata: %v", err)
 	}
 
-	for name, tc := range testCases {
-		t.Run(name, func(t *testing.T) {
-			registry, err := config.NewCarrierRegistry()
+	registry, _ := config.NewCarrierRegistry()
+	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
+	proc := processor.New(registry, tmpl, []string{"trace"})
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		t.Run(entry.Name(), func(t *testing.T) {
+			beforePath := filepath.Join(testdataRoot, entry.Name(), "before.go")
+			before, err := os.ReadFile(beforePath)
 			if err != nil {
-				t.Fatalf("failed to create carrier registry: %v", err)
+				t.Fatalf("failed to read before.go: %v", err)
 			}
 
-			tmpl, err := template.Parse(tc.template)
+			result, err := proc.TransformSource(before, "test")
 			if err != nil {
-				t.Fatalf("failed to parse template: %v", err)
+				t.Fatalf("transform failed: %v", err)
 			}
 
-			proc := processor.New(
-				registry,
-				tmpl,
-				tc.imports,
-			)
-
-			// First transformation
-			first, err := proc.TransformSource([]byte(tc.before), tc.pkgName)
-			if err != nil {
-				t.Fatalf("first TransformSource failed: %v", err)
-			}
-
-			// Second transformation (should be stable)
-			second, err := proc.TransformSource(first, tc.pkgName)
-			if err != nil {
-				t.Fatalf("second TransformSource failed: %v", err)
-			}
-
-			// Third transformation (should still be stable)
-			third, err := proc.TransformSource(second, tc.pkgName)
-			if err != nil {
-				t.Fatalf("third TransformSource failed: %v", err)
-			}
-
-			// Compare first and second
-			if diff := cmp.Diff(string(first), string(second)); diff != "" {
-				t.Errorf("first vs second mismatch (NOT IDEMPOTENT):\n%s\n\nFirst:\n%s\n\nSecond:\n%s",
-					diff, string(first), string(second))
-			}
-
-			// Compare second and third
-			if diff := cmp.Diff(string(second), string(third)); diff != "" {
-				t.Errorf("second vs third mismatch (NOT STABLE):\n%s", diff)
+			// Generated files should not be modified
+			if string(result) != string(before) {
+				t.Errorf("generated file should not be modified:\ngot:\n%s\nwant:\n%s", string(result), string(before))
 			}
 		})
 	}
 }
 
-// TestIdempotency_TemplateChange_SkeletonMode tests behavior when template changes in skeleton mode.
-// In skeleton mode, different function names (trace1 vs trace2) are considered different structures,
-// so a template change will INSERT a new statement rather than UPDATE the existing one.
-// For template updates, use marker mode instead.
+// TestIdempotency_TemplateChange_SkeletonMode tests behavior when template changes.
+// In skeleton mode, different function names are considered different structures,
+// so a template change will INSERT a new statement rather than UPDATE.
 func TestIdempotency_TemplateChange_SkeletonMode(t *testing.T) {
 	registry, err := config.NewCarrierRegistry()
 	if err != nil {
 		t.Fatalf("failed to create carrier registry: %v", err)
 	}
 
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`
+	before := readTestdataFile(t, "basic", "before.go")
 
 	// First template
 	tmpl1, _ := template.Parse(`defer trace1({{.Ctx}}, {{.FuncName | quote}})`)
 	proc1 := processor.New(registry, tmpl1, []string{"trace1"})
 
-	first, err := proc1.TransformSource([]byte(before), "test")
+	first, err := proc1.TransformSource(before, "test")
 	if err != nil {
 		t.Fatalf("first transform failed: %v", err)
 	}
@@ -284,7 +204,7 @@ func Foo(ctx context.Context) error {
 		t.Error("first transform should contain trace1")
 	}
 
-	// Second template (different from first) - IN SKELETON MODE, this inserts a new statement
+	// Second template - IN SKELETON MODE, this inserts a new statement
 	tmpl2, _ := template.Parse(`defer trace2({{.Ctx}}, {{.FuncName | quote}})`)
 	proc2 := processor.New(registry, tmpl2, []string{"trace2"})
 
@@ -293,33 +213,29 @@ func Foo(ctx context.Context) error {
 		t.Fatalf("second transform failed: %v", err)
 	}
 
-	// In skeleton mode: BOTH trace1 and trace2 will exist (insert, not update)
+	// Both should exist (insert, not update)
 	if !strings.Contains(string(second), "trace2") {
 		t.Error("second transform should contain trace2")
 	}
 	if !strings.Contains(string(second), "trace1") {
-		t.Error("skeleton mode: trace1 should still exist (different structure)")
+		t.Error("skeleton mode: trace1 should still exist")
 	}
 }
 
-// TestIdempotency_TemplateChange_MarkerMode tests that marker mode correctly updates on template change.
+// TestIdempotency_TemplateChange_MarkerMode tests that marker mode updates on template change.
 func TestIdempotency_TemplateChange_MarkerMode(t *testing.T) {
 	registry, err := config.NewCarrierRegistry()
 	if err != nil {
 		t.Fatalf("failed to create carrier registry: %v", err)
 	}
 
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`
+	before := readTestdataFile(t, "basic", "before.go")
 
 	// First template with marker mode
 	tmpl1, _ := template.Parse(`defer trace1({{.Ctx}}, {{.FuncName | quote}})`)
 	proc1 := processor.New(registry, tmpl1, []string{"trace1"}, processor.WithMatchMode(processor.MatchModeMarker))
 
-	first, err := proc1.TransformSource([]byte(before), "test")
+	first, err := proc1.TransformSource(before, "test")
 	if err != nil {
 		t.Fatalf("first transform failed: %v", err)
 	}
@@ -331,7 +247,7 @@ func Foo(ctx context.Context) error {
 		t.Error("marker mode should add marker")
 	}
 
-	// Second template (different from first) - IN MARKER MODE, this updates the marked statement
+	// Second template - IN MARKER MODE, this updates the marked statement
 	tmpl2, _ := template.Parse(`defer trace2({{.Ctx}}, {{.FuncName | quote}})`)
 	proc2 := processor.New(registry, tmpl2, []string{"trace2"}, processor.WithMatchMode(processor.MatchModeMarker))
 
@@ -340,7 +256,7 @@ func Foo(ctx context.Context) error {
 		t.Fatalf("second transform failed: %v", err)
 	}
 
-	// In marker mode: trace2 replaces trace1
+	// trace2 replaces trace1
 	if !strings.Contains(string(second), "trace2") {
 		t.Error("second transform should contain trace2")
 	}
@@ -355,139 +271,11 @@ func Foo(ctx context.Context) error {
 	}
 
 	if diff := cmp.Diff(string(second), string(third)); diff != "" {
-		t.Errorf("marker mode template change not stable:\n%s", diff)
+		t.Errorf("marker mode not stable:\n%s", diff)
 	}
 }
 
-// TestIdempotency_PreservesExistingCode tests that existing code is not modified.
-func TestIdempotency_PreservesExistingCode(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	// This comment should be preserved
-	x := 1
-	y := 2
-	return doSomething(x, y)
-}
-func doSomething(a, b int) error {
-	return nil
-}`
-
-	first, err := proc.TransformSource([]byte(before), "test")
-	if err != nil {
-		t.Fatalf("transform failed: %v", err)
-	}
-
-	// Check that existing code is preserved
-	checks := []string{
-		"This comment should be preserved",
-		"x := 1",
-		"y := 2",
-		"doSomething(x, y)",
-		"func doSomething",
-	}
-
-	for _, check := range checks {
-		if !strings.Contains(string(first), check) {
-			t.Errorf("missing expected code: %q", check)
-		}
-	}
-}
-
-// TestIdempotency_SkipDirective tests that skip directive works with idempotency.
-func TestIdempotency_SkipDirective(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	before := `package test
-import "context"
-//ctxweaver:skip
-func SkippedFunc(ctx context.Context) error {
-	return nil
-}
-func NormalFunc(ctx context.Context) error {
-	return nil
-}`
-
-	first, err := proc.TransformSource([]byte(before), "test")
-	if err != nil {
-		t.Fatalf("transform failed: %v", err)
-	}
-
-	// Skipped function should not have instrumentation
-	if strings.Contains(string(first), `"test.SkippedFunc"`) {
-		t.Error("SkippedFunc should not be instrumented")
-	}
-
-	// Normal function should have instrumentation
-	if !strings.Contains(string(first), `"test.NormalFunc"`) {
-		t.Error("NormalFunc should be instrumented")
-	}
-
-	// Run again - should be stable
-	second, err := proc.TransformSource(first, "test")
-	if err != nil {
-		t.Fatalf("second transform failed: %v", err)
-	}
-
-	if diff := cmp.Diff(string(first), string(second)); diff != "" {
-		t.Errorf("skip directive not stable:\n%s", diff)
-	}
-}
-
-// TestIdempotency_SimilarStatements tests detection of similar but different statements.
-func TestIdempotency_SimilarStatements(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	// Code with a similar-looking defer statement that's NOT our generated code
-	before := `package test
-import (
-	"context"
-	"github.com/newrelic/go-agent/v3/newrelic"
-)
-func Foo(ctx context.Context) error {
-	defer someOtherFunc()
-	return nil
-}`
-
-	first, err := proc.TransformSource([]byte(before), "test")
-	if err != nil {
-		t.Fatalf("transform failed: %v", err)
-	}
-
-	// Should have both: our generated statement AND the existing defer
-	if !strings.Contains(string(first), `"test.Foo"`) {
-		t.Error("should have generated statement")
-	}
-	if !strings.Contains(string(first), "someOtherFunc()") {
-		t.Error("should preserve existing defer")
-	}
-
-	// Count defer statements
-	deferCount := strings.Count(string(first), "defer ")
-	if deferCount != 2 {
-		t.Errorf("expected 2 defer statements, got %d\n%s", deferCount, string(first))
-	}
-
-	// Run again - should be stable
-	second, err := proc.TransformSource(first, "test")
-	if err != nil {
-		t.Fatalf("second transform failed: %v", err)
-	}
-
-	if diff := cmp.Diff(string(first), string(second)); diff != "" {
-		t.Errorf("similar statements not stable:\n%s", diff)
-	}
-}
-
-// TestIdempotency_MarkerMode tests that marker mode works correctly.
+// TestIdempotency_MarkerMode tests marker mode with default template.
 func TestIdempotency_MarkerMode(t *testing.T) {
 	registry, _ := config.NewCarrierRegistry()
 	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
@@ -498,23 +286,17 @@ func TestIdempotency_MarkerMode(t *testing.T) {
 		processor.WithMatchMode(processor.MatchModeMarker),
 	)
 
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`
+	before := readTestdataFile(t, "basic", "before.go")
 
-	first, err := proc.TransformSource([]byte(before), "test")
+	first, err := proc.TransformSource(before, "test")
 	if err != nil {
 		t.Fatalf("transform failed: %v", err)
 	}
 
-	// Should have marker
 	if !strings.Contains(string(first), "//ctxweaver:generated") {
 		t.Error("marker mode should add marker")
 	}
 
-	// Run again - should be stable
 	second, err := proc.TransformSource(first, "test")
 	if err != nil {
 		t.Fatalf("second transform failed: %v", err)
@@ -525,103 +307,21 @@ func Foo(ctx context.Context) error {
 	}
 }
 
-// TestIdempotency_BlockStatement tests block statement templates.
-func TestIdempotency_BlockStatement(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`{
-	txn := newrelic.FromContext({{.Ctx}})
-	defer txn.StartSegment({{.FuncName | quote}}).End()
-}`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`
-
-	first, err := proc.TransformSource([]byte(before), "test")
-	if err != nil {
-		t.Fatalf("transform failed: %v", err)
-	}
-
-	second, err := proc.TransformSource(first, "test")
-	if err != nil {
-		t.Fatalf("second transform failed: %v", err)
-	}
-
-	third, err := proc.TransformSource(second, "test")
-	if err != nil {
-		t.Fatalf("third transform failed: %v", err)
-	}
-
-	if diff := cmp.Diff(string(first), string(second)); diff != "" {
-		t.Errorf("block statement not idempotent (first vs second):\n%s", diff)
-	}
-
-	if diff := cmp.Diff(string(second), string(third)); diff != "" {
-		t.Errorf("block statement not stable (second vs third):\n%s", diff)
-	}
-}
-
-// TestIdempotency_SwitchStatement tests switch statement templates.
-func TestIdempotency_SwitchStatement(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`switch txn := newrelic.FromContext({{.Ctx}}); {
-case txn != nil:
-	defer txn.StartSegment({{.FuncName | quote}}).End()
-}`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`
-
-	first, err := proc.TransformSource([]byte(before), "test")
-	if err != nil {
-		t.Fatalf("transform failed: %v", err)
-	}
-
-	second, err := proc.TransformSource(first, "test")
-	if err != nil {
-		t.Fatalf("second transform failed: %v", err)
-	}
-
-	if diff := cmp.Diff(string(first), string(second)); diff != "" {
-		t.Errorf("switch statement not idempotent:\n%s", diff)
-	}
-}
-
-// TestIdempotency_ManyRuns tests stability over many runs.
+// TestIdempotency_ManyRuns tests stability over 10 consecutive runs.
 func TestIdempotency_ManyRuns(t *testing.T) {
 	registry, _ := config.NewCarrierRegistry()
 	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
 	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
 
-	before := `package test
-import "context"
-func Foo(ctx context.Context) error {
-	// existing code
-	x := 1
-	return process(x)
-}
-func Bar(ctx context.Context, a, b int) int {
-	return a + b
-}`
+	before := readTestdataFile(t, "preserves_existing_code", "before.go")
+	current := before
 
-	current := []byte(before)
-	var err error
-
-	// Run 10 times
 	for i := 0; i < 10; i++ {
 		next, err := proc.TransformSource(current, "test")
 		if err != nil {
 			t.Fatalf("run %d failed: %v", i, err)
 		}
 
-		// After the first run, all subsequent runs should produce identical output
 		if i > 0 {
 			if diff := cmp.Diff(string(current), string(next)); diff != "" {
 				t.Errorf("run %d not stable:\n%s", i, diff)
@@ -629,163 +329,86 @@ func Bar(ctx context.Context, a, b int) int {
 		}
 		current = next
 	}
-	_ = err // suppress unused
 }
 
-// TestIdempotency_TrailingNewlines tests handling of various trailing newline patterns.
-func TestIdempotency_TrailingNewlines(t *testing.T) {
+// TestPreservesExistingCode tests that existing code is preserved.
+func TestPreservesExistingCode(t *testing.T) {
 	registry, _ := config.NewCarrierRegistry()
 	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
 	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
 
-	testCases := map[string]string{
-		"no_trailing": `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}`,
-		"one_trailing": `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}
-`,
-		"multiple_trailing": `package test
-import "context"
-func Foo(ctx context.Context) error {
-	return nil
-}
+	before := readTestdataFile(t, "preserves_existing_code", "before.go")
 
-
-`,
-	}
-
-	for name, before := range testCases {
-		t.Run(name, func(t *testing.T) {
-			first, err := proc.TransformSource([]byte(before), "test")
-			if err != nil {
-				t.Fatalf("first transform failed: %v", err)
-			}
-
-			second, err := proc.TransformSource(first, "test")
-			if err != nil {
-				t.Fatalf("second transform failed: %v", err)
-			}
-
-			if diff := cmp.Diff(string(first), string(second)); diff != "" {
-				t.Errorf("not idempotent:\n%s", diff)
-			}
-		})
-	}
-}
-
-// TestIdempotency_VariousContextVarNames tests different context variable naming patterns.
-func TestIdempotency_VariousContextVarNames(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	testCases := map[string]string{
-		"ctx": `package test
-import "context"
-func Foo(ctx context.Context) error { return nil }`,
-		"c": `package test
-import "context"
-func Foo(c context.Context) error { return nil }`,
-		"parentCtx": `package test
-import "context"
-func Foo(parentCtx context.Context) error { return nil }`,
-		"reqCtx": `package test
-import "context"
-func Foo(reqCtx context.Context) error { return nil }`,
-	}
-
-	for name, before := range testCases {
-		t.Run(name, func(t *testing.T) {
-			first, err := proc.TransformSource([]byte(before), "test")
-			if err != nil {
-				t.Fatalf("first transform failed: %v", err)
-			}
-
-			second, err := proc.TransformSource(first, "test")
-			if err != nil {
-				t.Fatalf("second transform failed: %v", err)
-			}
-
-			if diff := cmp.Diff(string(first), string(second)); diff != "" {
-				t.Errorf("not idempotent for var name %s:\n%s", name, diff)
-			}
-		})
-	}
-}
-
-// TestSkipGeneratedFiles tests that generated files are skipped.
-func TestSkipGeneratedFiles(t *testing.T) {
-	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
-
-	// Generated file with standard header
-	generated := `// Code generated by some-tool; DO NOT EDIT.
-
-package test
-
-import "context"
-
-func Foo(ctx context.Context) error {
-	return nil
-}`
-
-	result, err := proc.TransformSource([]byte(generated), "test")
+	result, err := proc.TransformSource(before, "test")
 	if err != nil {
 		t.Fatalf("transform failed: %v", err)
 	}
 
-	// Should be unchanged (no instrumentation added)
-	if string(result) != generated {
-		t.Errorf("generated file should not be modified:\ngot:\n%s\nwant:\n%s", string(result), generated)
+	checks := []string{
+		"This comment should be preserved",
+		"x := 1",
+		"y := 2",
+		"doSomething(x, y)",
+		"func doSomething",
+	}
+
+	for _, check := range checks {
+		if !strings.Contains(string(result), check) {
+			t.Errorf("missing expected code: %q", check)
+		}
 	}
 }
 
-// TestSkipGeneratedFiles_VariousFormats tests various generated file comment formats.
-func TestSkipGeneratedFiles_VariousFormats(t *testing.T) {
+// TestSimilarStatements tests that similar existing statements are preserved.
+func TestSimilarStatements(t *testing.T) {
 	registry, _ := config.NewCarrierRegistry()
-	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	proc := processor.New(registry, tmpl, []string{"trace"})
+	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
+	proc := processor.New(registry, tmpl, []string{"github.com/newrelic/go-agent/v3/newrelic"})
 
-	testCases := map[string]string{
-		"standard": `// Code generated by tool; DO NOT EDIT.
+	before := readTestdataFile(t, "similar_statements", "before.go")
 
-package test
-import "context"
-func Foo(ctx context.Context) error { return nil }`,
-
-		"with_source": `// Code generated by protoc-gen-go. DO NOT EDIT.
-// source: example.proto
-
-package test
-import "context"
-func Foo(ctx context.Context) error { return nil }`,
-
-		"block_comment": `/*
-Code generated by tool; DO NOT EDIT.
-*/
-
-package test
-import "context"
-func Foo(ctx context.Context) error { return nil }`,
+	first, err := proc.TransformSource(before, "test")
+	if err != nil {
+		t.Fatalf("transform failed: %v", err)
 	}
 
-	for name, src := range testCases {
-		t.Run(name, func(t *testing.T) {
-			result, err := proc.TransformSource([]byte(src), "test")
-			if err != nil {
-				t.Fatalf("transform failed: %v", err)
-			}
-
-			if string(result) != src {
-				t.Errorf("generated file should not be modified")
-			}
-		})
+	// Should have both: generated statement AND existing defer
+	if !strings.Contains(string(first), `"test.Foo"`) {
+		t.Error("should have generated statement")
 	}
+	if !strings.Contains(string(first), "someOtherFunc()") {
+		t.Error("should preserve existing defer")
+	}
+
+	// Count defer statements
+	deferCount := strings.Count(string(first), "defer ")
+	if deferCount != 2 {
+		t.Errorf("expected 2 defer statements, got %d", deferCount)
+	}
+
+	// Should be stable
+	second, err := proc.TransformSource(first, "test")
+	if err != nil {
+		t.Fatalf("second transform failed: %v", err)
+	}
+
+	if diff := cmp.Diff(string(first), string(second)); diff != "" {
+		t.Errorf("not stable:\n%s", diff)
+	}
+}
+
+// readTestdataFile reads a file from testdata/idempotency directory
+func readTestdataFile(t *testing.T, subdir, filename string) []byte {
+	t.Helper()
+	path := filepath.Join("..", "..", "internal", "testdata", "idempotency", subdir, filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// Fallback to golden testdata
+		path = filepath.Join("..", "..", "internal", "testdata", subdir, filename)
+		data, err = os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", path, err)
+		}
+	}
+	return data
 }
