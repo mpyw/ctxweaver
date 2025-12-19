@@ -243,17 +243,17 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 
 func TestCompareFieldLists(t *testing.T) {
 	t.Run("both nil", func(t *testing.T) {
-		if !compareFieldLists(nil, nil) {
+		if !compareFieldLists(nil, nil, "test", false) {
 			t.Error("expected nil == nil")
 		}
 	})
 
 	t.Run("one nil", func(t *testing.T) {
 		fl := &dst.FieldList{List: []*dst.Field{}}
-		if compareFieldLists(nil, fl) {
+		if compareFieldLists(nil, fl, "test", false) {
 			t.Error("expected nil != non-nil")
 		}
-		if compareFieldLists(fl, nil) {
+		if compareFieldLists(fl, nil, "test", false) {
 			t.Error("expected non-nil != nil")
 		}
 	})
@@ -261,7 +261,7 @@ func TestCompareFieldLists(t *testing.T) {
 	t.Run("different lengths", func(t *testing.T) {
 		a := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
 		b := &dst.FieldList{List: []*dst.Field{}}
-		if compareFieldLists(a, b) {
+		if compareFieldLists(a, b, "test", false) {
 			t.Error("expected different lengths to not match")
 		}
 	})
@@ -269,7 +269,7 @@ func TestCompareFieldLists(t *testing.T) {
 	t.Run("same types", func(t *testing.T) {
 		a := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
 		b := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
-		if !compareFieldLists(a, b) {
+		if !compareFieldLists(a, b, "test", false) {
 			t.Error("expected same types to match")
 		}
 	})
