@@ -108,14 +108,7 @@ func compareNodes(a, b dst.Node) bool {
 
 	case *dst.Ident:
 		nodeB := b.(*dst.Ident)
-		// For identifiers, we need to distinguish between:
-		// - Package/type names (static): should match exactly
-		// - Variable names (dynamic): should be ignored
-		// Heuristic: if it's a single lowercase letter or common var names, treat as dynamic
-		if isDynamicIdent(nodeA.Name) && isDynamicIdent(nodeB.Name) {
-			return true // Both are likely variable names, consider them matching
-		}
-		// Otherwise compare exactly (likely package/type/function names)
+		// Compare identifier names exactly
 		return nodeA.Name == nodeB.Name
 
 	case *dst.BasicLit:
@@ -236,37 +229,4 @@ func compareFieldLists(a, b *dst.FieldList) bool {
 func compareFields(a, b *dst.Field) bool {
 	// Compare types only (names are dynamic)
 	return compareNodes(a.Type, b.Type)
-}
-
-// isDynamicIdent determines if an identifier is likely a dynamic variable name.
-// Dynamic identifiers are those that are likely to change between invocations:
-// - Single lowercase letters (x, y, ctx, c, s, etc.)
-// - Common variable names
-func isDynamicIdent(name string) bool {
-	// Single letter variables
-	if len(name) == 1 {
-		return true
-	}
-
-	// Common context variable names
-	dynamicNames := map[string]bool{
-		"ctx":     true,
-		"c":       true,
-		"context": true,
-		"err":     true,
-		"e":       true,
-		"s":       true,
-		"h":       true,
-		"r":       true,
-		"w":       true,
-		"req":     true,
-		"res":     true,
-		"resp":    true,
-		"tx":      true,
-		"txn":     true,
-		"db":      true,
-		"conn":    true,
-	}
-
-	return dynamicNames[name]
 }

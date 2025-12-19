@@ -25,7 +25,7 @@ func TestMatchesSkeleton(t *testing.T) {
 		"defer with different variable names": {
 			a:    `defer trace(ctx)`,
 			b:    `defer trace(c)`,
-			want: true, // ctx and c are both dynamic identifiers
+			want: false, // Identifiers are compared exactly
 		},
 		"different statement types": {
 			a:    `defer foo()`,
@@ -39,8 +39,13 @@ func TestMatchesSkeleton(t *testing.T) {
 		},
 		"same call expression": {
 			a:    `foo(a, b)`,
+			b:    `foo(a, b)`,
+			want: true,
+		},
+		"different argument names": {
+			a:    `foo(a, b)`,
 			b:    `foo(x, y)`,
-			want: true, // arguments are dynamic
+			want: false, // Identifiers are compared exactly
 		},
 		"different argument count": {
 			a:    `foo(a)`,
@@ -57,39 +62,49 @@ func TestMatchesSkeleton(t *testing.T) {
 			b:    `obj.Bar()`,
 			want: false,
 		},
-		"unary expression": {
+		"unary expression same var": {
+			a:    `x := -a`,
+			b:    `x := -a`,
+			want: true,
+		},
+		"unary expression different var": {
 			a:    `x := -a`,
 			b:    `y := -b`,
-			want: true,
+			want: false, // Identifiers are compared exactly
 		},
 		"different unary operators": {
 			a:    `x := -a`,
 			b:    `y := !b`,
 			want: false,
 		},
-		"binary expression": {
+		"binary expression same vars": {
+			a:    `x := a + b`,
+			b:    `x := a + b`,
+			want: true,
+		},
+		"binary expression different vars": {
 			a:    `x := a + b`,
 			b:    `y := c + d`,
-			want: true,
+			want: false, // Identifiers are compared exactly
 		},
 		"different binary operators": {
 			a:    `x := a + b`,
 			b:    `y := c - d`,
 			want: false,
 		},
-		"parenthesized expression": {
+		"parenthesized expression same": {
 			a:    `x := (a + b)`,
-			b:    `y := (c + d)`,
+			b:    `x := (a + b)`,
 			want: true,
 		},
 		"index expression": {
 			a:    `x := arr[0]`,
-			b:    `y := arr[1]`,
-			want: true, // index values are literals
+			b:    `x := arr[1]`,
+			want: true, // index values are literals, compared by type
 		},
 		"composite literal": {
 			a:    `x := Foo{A: 1}`,
-			b:    `y := Foo{A: 2}`,
+			b:    `x := Foo{A: 2}`,
 			want: true, // values differ but structure same
 		},
 		"different composite types": {
@@ -97,14 +112,14 @@ func TestMatchesSkeleton(t *testing.T) {
 			b:    `y := Bar{}`,
 			want: false,
 		},
-		"star expression": {
+		"star expression same": {
 			a:    `x := *p`,
-			b:    `y := *q`,
+			b:    `x := *p`,
 			want: true,
 		},
-		"type assertion": {
+		"type assertion same": {
 			a:    `x := v.(string)`,
-			b:    `y := w.(string)`,
+			b:    `x := v.(string)`,
 			want: true,
 		},
 		"return statement": {
@@ -158,38 +173,6 @@ func TestMatchesSkeleton_NilHandling(t *testing.T) {
 	})
 }
 
-func TestIsDynamicIdent(t *testing.T) {
-	tests := map[string]struct {
-		name string
-		want bool
-	}{
-		"single letter x":    {name: "x", want: true},
-		"single letter a":    {name: "a", want: true},
-		"ctx":                {name: "ctx", want: true},
-		"context":            {name: "context", want: true},
-		"err":                {name: "err", want: true},
-		"req":                {name: "req", want: true},
-		"resp":               {name: "resp", want: true},
-		"tx":                 {name: "tx", want: true},
-		"txn":                {name: "txn", want: true},
-		"db":                 {name: "db", want: true},
-		"conn":               {name: "conn", want: true},
-		"package name":       {name: "newrelic", want: false},
-		"type name":          {name: "Context", want: false},
-		"function name":      {name: "StartSegment", want: false},
-		"multi-char non-var": {name: "foo", want: false},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := isDynamicIdent(tt.name)
-			if got != tt.want {
-				t.Errorf("isDynamicIdent(%q) = %v, want %v", tt.name, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("different token in assign", func(t *testing.T) {
 		a, _ := ParseStatements(`x := 1`)
@@ -201,7 +184,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 
 	t.Run("func literal", func(t *testing.T) {
 		a, _ := ParseStatements(`f := func() {}`)
-		b, _ := ParseStatements(`g := func() {}`)
+		b, _ := ParseStatements(`f := func() {}`)
 		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected func literals to match")
 		}
@@ -209,7 +192,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 
 	t.Run("func literal with params", func(t *testing.T) {
 		a, _ := ParseStatements(`f := func(x int) int { return x }`)
-		b, _ := ParseStatements(`g := func(y int) int { return y }`)
+		b, _ := ParseStatements(`f := func(x int) int { return x }`)
 		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected func literals with same signature to match")
 		}
@@ -217,7 +200,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 
 	t.Run("func literal different param count", func(t *testing.T) {
 		a, _ := ParseStatements(`f := func(x int) {}`)
-		b, _ := ParseStatements(`g := func() {}`)
+		b, _ := ParseStatements(`f := func() {}`)
 		if MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected func literals with different param count to not match")
 		}
@@ -226,7 +209,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("case clause", func(t *testing.T) {
 		// switch statements with same structure but different literal values
 		a, _ := ParseStatements(`switch x { case 1: println("a") }`)
-		b, _ := ParseStatements(`switch y { case 2: println("b") }`)
+		b, _ := ParseStatements(`switch x { case 2: println("b") }`)
 		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected switch statements to match")
 		}
@@ -235,7 +218,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("if statement", func(t *testing.T) {
 		// if statements with same structure
 		a, _ := ParseStatements(`if x { println("a") }`)
-		b, _ := ParseStatements(`if y { println("b") }`)
+		b, _ := ParseStatements(`if x { println("b") }`)
 		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected if statements to match")
 		}
@@ -243,7 +226,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 
 	t.Run("if with else", func(t *testing.T) {
 		a, _ := ParseStatements(`if x { println("a") } else { println("b") }`)
-		b, _ := ParseStatements(`if y { println("c") } else { println("d") }`)
+		b, _ := ParseStatements(`if x { println("c") } else { println("d") }`)
 		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected if-else statements to match")
 		}
@@ -251,7 +234,7 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 
 	t.Run("key value expr", func(t *testing.T) {
 		a, _ := ParseStatements(`m := map[string]int{"a": 1}`)
-		b, _ := ParseStatements(`n := map[string]int{"b": 2}`)
+		b, _ := ParseStatements(`m := map[string]int{"b": 2}`)
 		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected map literals to match")
 		}
