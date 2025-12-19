@@ -91,11 +91,8 @@ func (p *Processor) processFile(pkg *packages.Package, astFile *ast.File, filena
 		return false, nil
 	}
 
-	// Create decorator from package (preserves type info for import path resolution)
-	dec := decorator.NewDecoratorFromPackage(pkg)
-
-	// Convert to DST (no re-parsing needed)
-	df, err := dec.DecorateFile(astFile)
+	// Convert to DST using the package's FileSet
+	df, err := decorator.DecorateFile(pkg.Fset, astFile)
 	if err != nil {
 		return false, fmt.Errorf("failed to decorate file: %w", err)
 	}

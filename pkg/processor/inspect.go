@@ -13,8 +13,10 @@ import (
 
 // processFunctions processes functions using type info from packages.Package.
 // Uses dst.Ident.Path set by NewDecoratorFromPackage for accurate import resolution.
+// Falls back to alias resolution when Ident.Path is not set.
 func (p *Processor) processFunctions(df *dst.File, pkg *packages.Package) (bool, error) {
-	return p.processFunctionsCore(df, pkg.PkgPath, nil)
+	aliases := resolveAliases(df.Imports)
+	return p.processFunctionsCore(df, pkg.PkgPath, aliases)
 }
 
 // processFunctionsForSource processes functions using fuzzy alias resolution.
@@ -114,24 +116,35 @@ func (p *Processor) matchCarrier(param *dst.Field, aliases map[string]string) (c
 		typ = star.X
 	}
 
-	// Must be a selector expression (pkg.Type)
-	sel, ok := typ.(*dst.SelectorExpr)
-	if !ok {
+	var pkgPath, typeName string
+
+	switch t := typ.(type) {
+	case *dst.SelectorExpr:
+		// SelectorExpr: pkg.Type (e.g., context.Context from source without type info)
+		pkgIdent, ok := t.X.(*dst.Ident)
+		if !ok {
+			return config.CarrierDef{}, "", false
+		}
+		// Prefer type-resolved path from decorator (set by NewDecoratorFromPackage)
+		// Fall back to fuzzy alias resolution when type info is not available
+		pkgPath = pkgIdent.Path
+		if pkgPath == "" && aliases != nil {
+			pkgPath = aliases[pkgIdent.Name]
+		}
+		typeName = t.Sel.Name
+
+	case *dst.Ident:
+		// Ident with Path: NewDecoratorFromPackage resolves the type and sets Path
+		pkgPath = t.Path
+		typeName = t.Name
+
+	default:
 		return config.CarrierDef{}, "", false
 	}
 
-	pkgIdent, ok := sel.X.(*dst.Ident)
-	if !ok {
+	if pkgPath == "" {
 		return config.CarrierDef{}, "", false
 	}
-
-	// Prefer type-resolved path from decorator (set by NewDecoratorFromPackage)
-	// Fall back to fuzzy alias resolution when type info is not available
-	pkgPath := pkgIdent.Path
-	if pkgPath == "" && aliases != nil {
-		pkgPath = aliases[pkgIdent.Name]
-	}
-	typeName := sel.Sel.Name
 
 	carrier, found := p.registry.Lookup(pkgPath, typeName)
 	if !found {
