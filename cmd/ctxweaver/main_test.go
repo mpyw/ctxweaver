@@ -620,9 +620,10 @@ func Handler(r *http.Request) {
 		}
 	})
 
-	t.Run("process error in results", func(t *testing.T) {
+	t.Run("default patterns when none specified", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+		// Config without patterns - should default to "./..."
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
 `
@@ -635,8 +636,6 @@ imports: []
 			t.Fatalf("failed to write go.mod: %v", err)
 		}
 
-		// Create a Go file that will cause an error when parsed (syntax error is handled differently,
-		// but we can test with a package that doesn't compile)
 		goFile := filepath.Join(tmpDir, "test.go")
 		goCode := `package test
 
@@ -649,27 +648,15 @@ func Foo(ctx context.Context) {
 			t.Fatalf("failed to write go file: %v", err)
 		}
 
-		// Create a second file with a syntax error to trigger errors during processing
-		badFile := filepath.Join(tmpDir, "bad.go")
-		badCode := `package test
-
-// This file has a syntax error
-func Bad( {
-}
-`
-		if err := os.WriteFile(badFile, []byte(badCode), 0o644); err != nil {
-			t.Fatalf("failed to write bad file: %v", err)
-		}
-
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
 		defer func() { _ = os.Chdir(oldWd) }()
 
-		setup("-config", configPath, "-silent", "./...")
+		// No patterns in args, should use default "./..."
+		setup("-config", configPath, "-silent")
 		err := run()
-		// Should fail because of syntax error in package
-		if err == nil {
-			t.Log("Note: syntax error may not trigger result.Errors path")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
 		}
 	})
 
