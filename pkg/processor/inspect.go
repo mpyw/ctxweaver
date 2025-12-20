@@ -20,7 +20,7 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 
 // isExportedFunc checks if a function name is exported (starts with uppercase).
 func isExportedFunc(name string) bool {
-	if len(name) == 0 {
+	if name == "" {
 		return false
 	}
 	r := rune(name[0])

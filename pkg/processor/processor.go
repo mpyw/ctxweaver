@@ -87,7 +87,7 @@ func NewFuncFilter(f config.Functions) *FuncFilter {
 }
 
 // Match checks if a function should be processed.
-func (f *FuncFilter) Match(funcName string, isMethod bool, isExported bool) bool {
+func (f *FuncFilter) Match(funcName string, isMethod, isExported bool) bool {
 	// Check types filter
 	if len(f.Types) > 0 {
 		var funcType config.FuncType
