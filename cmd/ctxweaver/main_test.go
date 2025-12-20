@@ -751,7 +751,6 @@ test: true
 	})
 }
 
-
 func TestRun_PackageWithSyntaxError(t *testing.T) {
 	// Helper to reset flags and set args
 	setup := func(args ...string) {

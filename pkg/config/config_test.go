@@ -323,7 +323,6 @@ func TestLoadConfig_WrongType(t *testing.T) {
 	}
 }
 
-
 func TestLoadConfig_NonExistentFile(t *testing.T) {
 	_, err := LoadConfig("/nonexistent/path/config.yaml")
 	if err == nil {

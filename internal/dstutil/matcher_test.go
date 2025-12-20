@@ -402,7 +402,6 @@ func TestMatchesExact_SkeletonPassesButExactFails(t *testing.T) {
 	}
 }
 
-
 func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 	// Test the special case: SelectorExpr matches Ident with Path set
 	// This happens when NewDecoratorFromPackage resolves `pkg.Func` to `Func` with Path="pkg"
