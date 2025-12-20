@@ -8,37 +8,33 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/mpyw/ctxweaver/internal"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/processor"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
-// ANSI color codes
-const (
-	colorReset  = "\033[0m"
-	colorCyan   = "\033[36m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorRed    = "\033[31m"
-	colorDim    = "\033[2m"
-)
+// Color helper functions for stdout and stderr
+func co(color string) string { return internal.StdoutColor(color) }
+func ce(color string) string { return internal.StderrColor(color) }
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%sctxweaver: %v%s\n", colorRed, err, colorReset)
+		fmt.Fprintf(os.Stderr, "%sctxweaver: %v%s\n", ce(internal.ColorRed), err, ce(internal.ColorReset))
 		os.Exit(1)
 	}
 }
 
 func run() error {
 	var (
-		configFile string
-		dryRun     bool
-		verbose    bool
-		silent     bool
-		test       bool
-		remove     bool
-		noHooks    bool
+		configFile     string
+		dryRun         bool
+		verbose        bool
+		silent         bool
+		test           bool
+		remove         bool
+		noHooks        bool
+		excludeRegexps string
 	)
 
 	flag.StringVar(&configFile, "config", "ctxweaver.yaml", "path to configuration file")
@@ -48,6 +44,7 @@ func run() error {
 	flag.BoolVar(&test, "test", false, "process test files")
 	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
 	flag.BoolVar(&noHooks, "no-hooks", false, "skip pre/post hooks")
+	flag.StringVar(&excludeRegexps, "exclude-regexps", "", "comma-separated regex patterns to exclude packages by import path")
 	flag.Parse()
 
 	// Load configuration
@@ -59,6 +56,9 @@ func run() error {
 	// Override config with explicitly passed flags
 	if isFlagPassed("test") {
 		cfg.Test = test
+	}
+	if isFlagPassed("exclude-regexps") && excludeRegexps != "" {
+		cfg.ExcludeRegexps = append(cfg.ExcludeRegexps, strings.Split(excludeRegexps, ",")...)
 	}
 
 	// Get patterns from args or config
@@ -105,6 +105,7 @@ func run() error {
 		processor.WithDryRun(dryRun),
 		processor.WithVerbose(verbose && !silent),
 		processor.WithRemove(remove),
+		processor.WithExcludeRegexps(cfg.ExcludeRegexps),
 	)
 
 	// Print ctxweaver execution header
@@ -113,7 +114,7 @@ func run() error {
 		if remove {
 			action = "removing"
 		}
-		fmt.Printf("%s▶ ctxweaver%s %s%s %s%s\n", colorCyan, colorReset, colorDim, action, strings.Join(patterns, " "), colorReset)
+		fmt.Printf("%s▶ ctxweaver%s %s%s %s%s\n", co(internal.ColorCyan), co(internal.ColorReset), co(internal.ColorDim), action, strings.Join(patterns, " "), co(internal.ColorReset))
 	}
 
 	// Process
@@ -127,7 +128,7 @@ func run() error {
 		fmt.Printf("  Files processed: %d\n", result.FilesProcessed)
 		fmt.Printf("  Files modified: %d\n", result.FilesModified)
 	} else if !silent {
-		fmt.Printf("  %s✓%s %d files processed, %d modified\n", colorGreen, colorReset, result.FilesProcessed, result.FilesModified)
+		fmt.Printf("  %s✓%s %d files processed, %d modified\n", co(internal.ColorGreen), co(internal.ColorReset), result.FilesProcessed, result.FilesModified)
 	}
 
 	if len(result.Errors) > 0 {
@@ -152,12 +153,12 @@ func run() error {
 // If any command fails (non-zero exit code), execution stops and an error is returned.
 func runHooks(phase string, commands []string, silent bool) error {
 	if !silent {
-		fmt.Printf("%s▶ %s%s\n", colorYellow, phase, colorReset)
+		fmt.Printf("%s▶ %s%s\n", co(internal.ColorYellow), phase, co(internal.ColorReset))
 	}
 
 	for _, cmdStr := range commands {
 		if !silent {
-			fmt.Printf("  %s$ %s%s\n", colorDim, cmdStr, colorReset)
+			fmt.Printf("  %s$ %s%s\n", co(internal.ColorDim), cmdStr, co(internal.ColorReset))
 		}
 
 		cmd := exec.Command("sh", "-c", cmdStr)

@@ -27,6 +27,13 @@
       },
       "description": "Package patterns to process (e.g., './...', './pkg/...'). Defaults to ['./...'] if not specified."
     },
+    "exclude_regexps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Regex patterns to exclude packages by their import path (e.g., '^github\\.com/foo/bar/internal', '/mock$')"
+    },
     "test": {
       "type": "boolean",
       "description": "Whether to process test files (*_test.go)",

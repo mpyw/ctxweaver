@@ -2,6 +2,11 @@
 package processor
 
 import (
+	"fmt"
+	"os"
+	"regexp"
+
+	"github.com/mpyw/ctxweaver/internal"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
@@ -11,7 +16,8 @@ type Processor struct {
 	registry *config.CarrierRegistry
 	tmpl     *template.Template
 	imports  []string
-	remove   bool // Remove mode: remove generated statements instead of adding
+	exclude  []*regexp.Regexp // Regex patterns for package paths to exclude
+	remove   bool             // Remove mode: remove generated statements instead of adding
 	test     bool
 	dryRun   bool
 	verbose  bool
@@ -45,6 +51,25 @@ func WithVerbose(verbose bool) Option {
 func WithRemove(remove bool) Option {
 	return func(p *Processor) {
 		p.remove = remove
+	}
+}
+
+// WithExcludeRegexps sets regex patterns for package paths to exclude.
+// Each pattern is compiled as a regular expression.
+// Invalid patterns are skipped with a warning to stderr.
+func WithExcludeRegexps(patterns []string) Option {
+	return func(p *Processor) {
+		for _, pattern := range patterns {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%swarning:%s invalid exclude pattern %q: %v\n",
+					internal.StderrColor(internal.ColorYellow),
+					internal.StderrColor(internal.ColorReset),
+					pattern, err)
+				continue
+			}
+			p.exclude = append(p.exclude, re)
+		}
 	}
 }
 

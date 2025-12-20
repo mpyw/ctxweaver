@@ -87,19 +87,20 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 
 ### Configuration Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `template` | `string` | Go template for the statement to insert |
-| `template_file` | `string` | Path to template file (alternative to inline `template`) |
-| `imports` | `[]string` | Import paths to add when statement is inserted |
-| `patterns` | `[]string` | Package patterns to process (overridden by CLI args) |
-| `test` | `bool` | Whether to process test files (overridden by `-test` flag) |
-| `carriers` | `[]object` | Custom context carrier definitions |
-| `hooks.pre` | `[]string` | Shell commands to run before processing |
-| `hooks.post` | `[]string` | Shell commands to run after processing |
+| Option | Type | Required | Default | Description |
+|--------|------|:--------:|---------|-------------|
+| `template` | `string` | ✅ | | Go template for the statement to insert |
+| `template_file` | `string` | ✅ | | Path to template file (alternative to inline `template`) |
+| `imports` | `[]string` | | `[]` | Import paths to add when statement is inserted |
+| `patterns` | `[]string` | | `["./..."]` | Package patterns to process (overridden by CLI args) |
+| `exclude_regexps` | `[]string` | | `[]` | Regex patterns to exclude packages by import path |
+| `test` | `bool` | | `false` | Whether to process test files (overridden by `-test` flag) |
+| `carriers` | `[]object` | | `[]` | Custom context carrier definitions |
+| `hooks.pre` | `[]string` | | `[]` | Shell commands to run before processing |
+| `hooks.post` | `[]string` | | `[]` | Shell commands to run after processing |
 
 > [!NOTE]
-> - If both `template` and `template_file` are specified, `template` takes precedence.
+> - Either `template` or `template_file` is required. If both are specified, `template` takes precedence.
 > - CLI arguments and flags take precedence over config file values.
 
 ## Flags
@@ -113,6 +114,7 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 | `-test` | `false` | Process test files (`*_test.go`) |
 | `-remove` | `false` | Remove generated statements instead of adding them |
 | `-no-hooks` | `false` | Skip pre/post hooks defined in config |
+| `-exclude-regexps` | | Comma-separated regex patterns to exclude packages by import path |
 
 ### Examples
 

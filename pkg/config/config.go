@@ -69,6 +69,8 @@ type Config struct {
 	Carriers []CarrierDef `yaml:"carriers" json:"carriers,omitempty"`
 	// Patterns are the package patterns to process (e.g., "./...")
 	Patterns []string `yaml:"patterns" json:"patterns,omitempty"`
+	// ExcludeRegexps are regex patterns to exclude packages by their import path
+	ExcludeRegexps []string `yaml:"exclude_regexps" json:"exclude_regexps,omitempty"`
 	// Test indicates whether to process test files
 	Test bool `yaml:"test" json:"test,omitempty"`
 	// Hooks are shell commands to run before and after processing
