@@ -373,6 +373,44 @@ go build -o bin/ctxweaver ./cmd/ctxweaver
 ./bin/ctxweaver -config=ctxweaver.yaml ./...
 ```
 
+## Why ctxweaver?
+
+For Go instrumentation, there are two main approaches: **compile-time instrumentation** (like [Datadog Orchestrion](https://github.com/DataDog/orchestrion)) and **code generation** (like ctxweaver). Here's how they compare:
+
+| Feature | ctxweaver | [Orchestrion](https://github.com/DataDog/orchestrion) |
+|---------|-----------|-------------|
+| Approach | Explicit code generation | Compile-time AST injection |
+| Output visibility | Generated code in source files | Hidden in build process |
+| Comment preservation | Yes ([DST](https://github.com/dave/dst)) | N/A (no source modification) |
+| Vendor lock-in | None (template-based) | Datadog by default |
+| Custom templates | Full control via Go templates | Limited (`//dd:span` directive) |
+| Framework support | Built-in (Echo, Gin, Fiber, etc.) | Via integrations |
+| Reversibility | `ctxweaver -remove` | Remove toolchain config |
+| Git diff | Visible changes | No source changes |
+
+### When to Choose ctxweaver
+
+1. **You want visible, reviewable code**: Generated statements appear in your source files and git history. Code reviewers can see exactly what instrumentation is added.
+
+2. **You need full template control**: Define exactly what gets inserted using Go templates. Not limited to predefined patterns.
+
+3. **You want vendor independence**: Works with any APM (New Relic, OpenTelemetry, custom solutions). No SDK lock-in.
+
+4. **You use context-carrying frameworks**: Built-in support for Echo, Gin, Fiber, Cobra, urfave/cli context types.
+
+5. **You want idempotent updates**: Re-running ctxweaver updates existing statements (e.g., after function rename) without duplication.
+
+### When to Choose Orchestrion
+
+1. **You prefer zero source changes**: Instrumentation happens at compile time with no visible code modifications.
+
+2. **You use Datadog**: Native integration with Datadog APM and ASM.
+
+3. **You want automatic library instrumentation**: Orchestrion can instrument third-party library calls automatically.
+
+> [!NOTE]
+> Traditional AOP libraries ([gogap/aop](https://github.com/gogap/aop), [AspectGo](https://github.com/AkihiroSuda/aspectgo)) exist but are largely unmaintained. Go's culture favors explicit code over implicit magic, which is why ctxweaver generates visible source code rather than hiding instrumentation in the build process.
+
 ## Related Tools
 
 - [goroutinectx](https://github.com/mpyw/goroutinectx) - Goroutine context propagation linter
