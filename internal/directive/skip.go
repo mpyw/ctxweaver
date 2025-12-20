@@ -7,13 +7,21 @@ import (
 	"github.com/dave/dst"
 )
 
-const skipMarker = "ctxweaver:skip"
+const skipDirective = "ctxweaver:skip"
+
+// isSkipComment checks if a comment text is a skip directive.
+// Supports both "//ctxweaver:skip" and "// ctxweaver:skip".
+func isSkipComment(text string) bool {
+	text = strings.TrimPrefix(text, "//")
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(text, skipDirective)
+}
 
 // HasSkipDirective checks if node decorations contain a skip directive.
 // This is used for file-level and function-level skip directives.
 func HasSkipDirective(decs *dst.NodeDecs) bool {
 	for _, c := range decs.Start.All() {
-		if strings.Contains(c, skipMarker) {
+		if isSkipComment(c) {
 			return true
 		}
 	}
@@ -21,17 +29,16 @@ func HasSkipDirective(decs *dst.NodeDecs) bool {
 }
 
 // HasStmtSkipDirective checks if a statement has a skip directive comment.
-// This handles both "//ctxweaver:skip" and "// ctxweaver:skip" variants,
-// checking both Start (before) and End (trailing) decorations.
+// Checks both Start (before) and End (trailing) decorations.
 func HasStmtSkipDirective(stmt dst.Stmt) bool {
 	decs := stmt.Decorations()
 	for _, c := range decs.Start.All() {
-		if strings.Contains(c, skipMarker) {
+		if isSkipComment(c) {
 			return true
 		}
 	}
 	for _, c := range decs.End.All() {
-		if strings.Contains(c, skipMarker) {
+		if isSkipComment(c) {
 			return true
 		}
 	}

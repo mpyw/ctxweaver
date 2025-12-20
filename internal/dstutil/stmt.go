@@ -1,11 +1,8 @@
 package dstutil
 
 import (
-	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
-	"strings"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
@@ -86,50 +83,4 @@ func ParseStatements(stmtStr string) ([]dst.Stmt, error) {
 	}
 
 	return funcDecl.Body.List, nil
-}
-
-// StmtsToStrings converts DST statements to their string representations.
-func StmtsToStrings(stmts []dst.Stmt) []string {
-	result := make([]string, len(stmts))
-	for i, stmt := range stmts {
-		result[i] = StmtToString(stmt)
-	}
-	return result
-}
-
-// StmtToString converts a DST statement back to a string.
-// This is used for exact comparison in skeleton matching.
-func StmtToString(stmt dst.Stmt) string {
-	// Create a minimal file containing just this statement
-	df := &dst.File{
-		Name: dst.NewIdent("p"),
-		Decls: []dst.Decl{
-			&dst.FuncDecl{
-				Name: dst.NewIdent("f"),
-				Type: &dst.FuncType{},
-				Body: &dst.BlockStmt{
-					List: []dst.Stmt{stmt},
-				},
-			},
-		},
-	}
-
-	// Restore to AST
-	fset, f, err := decorator.RestoreFile(df)
-	if err != nil {
-		return ""
-	}
-
-	// Extract just the statement part
-	funcDecl := f.Decls[0].(*ast.FuncDecl)
-	if len(funcDecl.Body.List) == 0 {
-		return ""
-	}
-
-	var buf strings.Builder
-	if err := format.Node(&buf, fset, funcDecl.Body.List[0]); err != nil {
-		return ""
-	}
-
-	return strings.TrimSpace(buf.String())
 }
