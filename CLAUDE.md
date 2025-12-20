@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Template-based insertion**: Fully customizable via Go templates
 - **Context carrier detection**: Recognizes `context.Context` and framework-specific types (Echo, Gin, Fiber, etc.)
+- **Package exclusion**: Exclude packages by regex patterns matched against import paths
 - **Statement detection**: Detects existing statements and updates them when function names change
 - **Comment preservation**: Uses DST (Decorated Syntax Tree) to preserve comments and formatting
 
@@ -43,6 +44,7 @@ ctxweaver/
 │   ├── dstutil/                # DST utilities
 │   │   ├── matcher.go          # Statement pattern matching
 │   │   └── stmt.go             # Statement manipulation
+│   ├── color.go                # TTY-aware color output utilities
 │   └── helpers.go              # Shared utilities
 ├── testdata/                   # Integration test fixtures
 ├── docs/
@@ -65,22 +67,24 @@ ctxweaver/
 1. Load config (YAML)
 2. Parse template
 3. Create carrier registry (defaults + custom)
-4. packages.Load(patterns)
-5. For each package:
-   For each file:
-     a. Check file-level skip directive
-     b. Parse with fresh fset
-     c. Convert AST → DST
-     d. For each function:
+4. Compile exclude regex patterns
+5. packages.Load(patterns)
+6. For each package:
+   a. Check exclude_regexps against package import path
+   b. For each file:
+      - Check file-level skip directive
+      - Parse with fresh fset
+      - Convert AST → DST
+      - For each function:
         - Check function-level skip
         - Check first parameter for carrier match
         - Render template with variables
         - Detect existing statement
         - Insert/Update/Skip
-     e. If modified:
+      - If modified:
         - Add imports via astutil
         - Format and write
-6. Report results
+7. Report results
 ```
 
 ## Development Commands
