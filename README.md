@@ -129,6 +129,8 @@ ctxweaver -test ./...
 | `{{.ReceiverVar}}` | `string` | Receiver variable name (empty if not a method) |
 | `{{.IsMethod}}` | `bool` | Whether this is a method |
 | `{{.IsPointerReceiver}}` | `bool` | Whether the receiver is a pointer |
+| `{{.IsGenericFunc}}` | `bool` | Whether the function has type parameters |
+| `{{.IsGenericReceiver}}` | `bool` | Whether the receiver type has type parameters |
 
 ### FuncName Format
 
@@ -139,6 +141,9 @@ ctxweaver -test ./...
 | Function | `pkg.Func` | `service.CreateUser` |
 | Method (pointer receiver) | `pkg.(*Type).Method` | `service.(*UserService).GetByID` |
 | Method (value receiver) | `pkg.Type.Method` | `service.UserService.String` |
+| Generic function | `pkg.Func[...]` | `service.Process[...]` |
+| Generic method (pointer) | `pkg.(*Type[...]).Method` | `service.(*Container[...]).Get` |
+| Generic method (value) | `pkg.Type[...].Method` | `service.Wrapper[...].Unwrap` |
 
 ### Built-in Functions
 
@@ -189,10 +194,12 @@ imports:
 This gives you full control over the naming format. Available variables for building custom names:
 - `{{.PackageName}}` - Package name (e.g., `service`)
 - `{{.PackagePath}}` - Full import path (e.g., `github.com/example/myapp/pkg/service`)
-- `{{.ReceiverType}}` - Receiver type (e.g., `UserService`)
+- `{{.ReceiverType}}` - Receiver type (e.g., `UserService`, `Container` for generics)
 - `{{.FuncBaseName}}` - Function/method name (e.g., `GetByID`)
 - `{{.IsMethod}}` - `true` if method, `false` if function
 - `{{.IsPointerReceiver}}` - `true` if pointer receiver
+- `{{.IsGenericFunc}}` - `true` if generic function
+- `{{.IsGenericReceiver}}` - `true` if generic receiver type
 
 ## Built-in Context Carriers
 

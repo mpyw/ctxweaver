@@ -22,6 +22,7 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 
 	// Check if the function itself has type parameters
 	funcHasTypeParams := decl.Type.TypeParams != nil && len(decl.Type.TypeParams.List) > 0
+	vars.IsGenericFunc = funcHasTypeParams
 
 	// Build fully qualified function name
 	if decl.Recv != nil && len(decl.Recv.List) > 0 {
@@ -35,6 +36,7 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 		// Extract receiver type name and check for generics
 		recvTypeName, recvHasGenerics := extractReceiverTypeName(recv.Type)
 		vars.ReceiverType = recvTypeName
+		vars.IsGenericReceiver = recvHasGenerics
 
 		switch recv.Type.(type) {
 		case *dst.StarExpr:
