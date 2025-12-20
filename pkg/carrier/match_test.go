@@ -10,10 +10,7 @@ import (
 
 func TestMatch(t *testing.T) {
 	// Create a test registry with known carriers
-	registry, err := config.NewCarrierRegistry()
-	if err != nil {
-		t.Fatalf("failed to create registry: %v", err)
-	}
+	registry := config.NewCarrierRegistry()
 	registry.Register(config.CarrierDef{
 		Package:  "net/http",
 		Type:     "Request",

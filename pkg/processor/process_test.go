@@ -39,7 +39,7 @@ func setupTestModule(t *testing.T, files map[string]string) string {
 
 func TestProcess(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry, _ := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry()
 
 	t.Run("basic insertion", func(t *testing.T) {
 		tmpDir := setupTestModule(t, map[string]string{
@@ -368,7 +368,7 @@ func B(ctx context.Context) {
 
 func TestProcess_WithImports(t *testing.T) {
 	tmpl, _ := template.Parse(`defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`)
-	registry, _ := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry()
 
 	tmpDir := setupTestModule(t, map[string]string{
 		"main.go": `package main
@@ -404,7 +404,7 @@ func Foo(ctx context.Context) {
 
 func TestShouldProcessFile(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry, _ := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry()
 
 	t.Run("skip testdata directory", func(t *testing.T) {
 		tmpDir := setupTestModule(t, map[string]string{

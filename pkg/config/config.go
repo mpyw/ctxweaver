@@ -9,6 +9,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
+
+	"github.com/mpyw/ctxweaver/internal"
 )
 
 //go:embed carriers.yaml
@@ -16,6 +18,24 @@ var defaultCarriersYAML []byte
 
 //go:embed schema.json
 var schemaJSON []byte
+
+// Parsed at init time - failure here means corrupted embedded files.
+var (
+	defaultCarriers []CarrierDef
+	configSchema    *jsonschema.Schema
+)
+
+func init() {
+	// Parse embedded carriers.yaml
+	var carriersFile CarriersFile
+	defaultCarriers = internal.Must(carriersFile, yaml.Unmarshal(defaultCarriersYAML, &carriersFile)).Carriers
+
+	// Parse and compile embedded schema.json
+	schemaDoc := internal.Must(jsonschema.UnmarshalJSON(bytes.NewReader(schemaJSON)))
+	compiler := jsonschema.NewCompiler()
+	internal.Must(struct{}{}, compiler.AddResource("schema.json", schemaDoc))
+	configSchema = internal.Must(compiler.Compile("schema.json"))
+}
 
 // CarrierDef defines a context carrier type.
 type CarrierDef struct {
@@ -61,22 +81,14 @@ type CarrierRegistry struct {
 }
 
 // NewCarrierRegistry creates a registry with default carriers loaded.
-func NewCarrierRegistry() (*CarrierRegistry, error) {
+func NewCarrierRegistry() *CarrierRegistry {
 	r := &CarrierRegistry{
 		carriers: make(map[string]CarrierDef),
 	}
-
-	// Load default carriers
-	var defaults CarriersFile
-	if err := yaml.Unmarshal(defaultCarriersYAML, &defaults); err != nil {
-		return nil, fmt.Errorf("failed to parse embedded carriers.yaml: %w", err)
-	}
-
-	for _, c := range defaults.Carriers {
+	for _, c := range defaultCarriers {
 		r.Register(c)
 	}
-
-	return r, nil
+	return r
 }
 
 // Register adds a carrier to the registry.
@@ -139,26 +151,7 @@ func LoadConfig(path string) (*Config, error) {
 
 // validateSchema validates data against the embedded JSON Schema.
 func validateSchema(data any) error {
-	schema, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaJSON))
-	if err != nil {
-		return fmt.Errorf("failed to parse schema: %w", err)
-	}
-
-	c := jsonschema.NewCompiler()
-	if err := c.AddResource("schema.json", schema); err != nil {
-		return fmt.Errorf("failed to add schema resource: %w", err)
-	}
-
-	sch, err := c.Compile("schema.json")
-	if err != nil {
-		return fmt.Errorf("failed to compile schema: %w", err)
-	}
-
-	if err := sch.Validate(data); err != nil {
-		return err
-	}
-
-	return nil
+	return configSchema.Validate(data)
 }
 
 // BuildContextExpr builds the expression to access context.Context from a variable.
