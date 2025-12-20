@@ -274,3 +274,130 @@ func TestCompareFieldLists(t *testing.T) {
 		}
 	})
 }
+
+func TestMatchesExact(t *testing.T) {
+	tests := map[string]struct {
+		a    string
+		b    string
+		want bool
+	}{
+		"identical statements": {
+			a:    `defer foo()`,
+			b:    `defer foo()`,
+			want: true,
+		},
+		"identical with string literal": {
+			a:    `defer trace(ctx, "hello")`,
+			b:    `defer trace(ctx, "hello")`,
+			want: true,
+		},
+		"different string literals": {
+			a:    `defer trace(ctx, "hello")`,
+			b:    `defer trace(ctx, "world")`,
+			want: false, // Exact mode compares literal values
+		},
+		"different number literals": {
+			a:    `x := 1`,
+			b:    `x := 2`,
+			want: false,
+		},
+		"same number literals": {
+			a:    `x := 42`,
+			b:    `x := 42`,
+			want: true,
+		},
+		"different function names": {
+			a:    `foo()`,
+			b:    `bar()`,
+			want: false,
+		},
+		"composite literal different values": {
+			a:    `x := Foo{A: 1}`,
+			b:    `x := Foo{A: 2}`,
+			want: false, // Exact mode compares literal values
+		},
+		"composite literal same values": {
+			a:    `x := Foo{A: 1}`,
+			b:    `x := Foo{A: 1}`,
+			want: true,
+		},
+		"map literal different keys": {
+			a:    `m := map[string]int{"a": 1}`,
+			b:    `m := map[string]int{"b": 1}`,
+			want: false,
+		},
+		"index expression different indices": {
+			a:    `x := arr[0]`,
+			b:    `x := arr[1]`,
+			want: false, // Exact mode compares index values
+		},
+		"switch case different values": {
+			a:    `switch x { case 1: println("a") }`,
+			b:    `switch x { case 2: println("b") }`,
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			stmtsA, err := ParseStatements(tt.a)
+			if err != nil {
+				t.Fatalf("failed to parse a: %v", err)
+			}
+			stmtsB, err := ParseStatements(tt.b)
+			if err != nil {
+				t.Fatalf("failed to parse b: %v", err)
+			}
+
+			got := MatchesExact(stmtsA[0], stmtsB[0])
+			if got != tt.want {
+				t.Errorf("MatchesExact() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchesExact_SkeletonPassesButExactFails(t *testing.T) {
+	// These cases verify the relationship between Skeleton and Exact matching:
+	// Skeleton should pass (same structure) but Exact should fail (different values)
+	tests := map[string]struct {
+		a string
+		b string
+	}{
+		"string literal difference": {
+			a: `defer apm.StartSegment(ctx, "pkg.Foo").End()`,
+			b: `defer apm.StartSegment(ctx, "pkg.Bar").End()`,
+		},
+		"number literal difference": {
+			a: `x := arr[0]`,
+			b: `x := arr[1]`,
+		},
+		"return value difference": {
+			a: `return 1`,
+			b: `return 2`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			stmtsA, err := ParseStatements(tt.a)
+			if err != nil {
+				t.Fatalf("failed to parse a: %v", err)
+			}
+			stmtsB, err := ParseStatements(tt.b)
+			if err != nil {
+				t.Fatalf("failed to parse b: %v", err)
+			}
+
+			skeleton := MatchesSkeleton(stmtsA[0], stmtsB[0])
+			exact := MatchesExact(stmtsA[0], stmtsB[0])
+
+			if !skeleton {
+				t.Error("expected MatchesSkeleton() = true")
+			}
+			if exact {
+				t.Error("expected MatchesExact() = false")
+			}
+		})
+	}
+}

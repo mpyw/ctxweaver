@@ -8,10 +8,7 @@ import (
 )
 
 func TestNewCarrierRegistry(t *testing.T) {
-	r, err := NewCarrierRegistry()
-	if err != nil {
-		t.Fatalf("NewCarrierRegistry() error = %v", err)
-	}
+	r := NewCarrierRegistry()
 
 	// Check default carriers are loaded
 	tests := map[string]struct {
@@ -188,10 +185,7 @@ func TestLoadConfig_WithTemplateFile(t *testing.T) {
 }
 
 func TestCarrierRegistry_All(t *testing.T) {
-	r, err := NewCarrierRegistry()
-	if err != nil {
-		t.Fatalf("NewCarrierRegistry() error = %v", err)
-	}
+	r := NewCarrierRegistry()
 
 	all := r.All()
 	if len(all) == 0 {

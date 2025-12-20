@@ -89,10 +89,7 @@ func run() error {
 	}
 
 	// Create carrier registry
-	registry, err := config.NewCarrierRegistry()
-	if err != nil {
-		return fmt.Errorf("failed to create carrier registry: %w", err)
-	}
+	registry := config.NewCarrierRegistry()
 
 	// Register custom carriers from config
 	for _, c := range cfg.Carriers {

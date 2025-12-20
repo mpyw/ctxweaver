@@ -258,10 +258,7 @@ func runInsertionTest(t *testing.T, testdataRoot, caseName string) {
 		cfg := loadTestConfig(origDir)
 		caseDir := setupTestdataModule(t, testdataRoot, caseName, setupOpts{})
 
-		registry, err := config.NewCarrierRegistry()
-		if err != nil {
-			t.Fatalf("failed to create carrier registry: %v", err)
-		}
+		registry := config.NewCarrierRegistry()
 
 		tmpl, err := template.Parse(cfg.Template)
 		if err != nil {
@@ -333,10 +330,7 @@ func runRemoveTest(t *testing.T, testdataRoot, caseName string) {
 
 		caseDir := setupTestdataModule(t, testdataRoot, caseName, setupOpts{forRemove: true})
 
-		registry, err := config.NewCarrierRegistry()
-		if err != nil {
-			t.Fatalf("failed to create carrier registry: %v", err)
-		}
+		registry := config.NewCarrierRegistry()
 
 		tmpl, err := template.Parse(cfg.Template)
 		if err != nil {
@@ -393,10 +387,7 @@ func runIdempotencyTest(t *testing.T, testdataRoot, caseName string) {
 		cfg := loadTestConfig(origDir)
 		caseDir := setupTestdataModule(t, testdataRoot, caseName, setupOpts{})
 
-		registry, err := config.NewCarrierRegistry()
-		if err != nil {
-			t.Fatalf("failed to create carrier registry: %v", err)
-		}
+		registry := config.NewCarrierRegistry()
 
 		tmpl, err := template.Parse(cfg.Template)
 		if err != nil {
