@@ -12,7 +12,7 @@ A Go code generator that weaves statements into functions receiving context-like
 
 ## Overview
 
-`ctxweaver` automatically inserts or updates statements at the beginning of functions that receive `context.Context` or other context-carrying types. This is useful for:
+`ctxweaver` automatically inserts or updates statements at the beginning of functions that receive [`context.Context`](https://pkg.go.dev/context#Context) or other context-carrying types. This is useful for:
 
 - **APM instrumentation**: Automatically add tracing segments to all context-aware functions
 - **Logging setup**: Insert structured logging initialization
@@ -241,12 +241,12 @@ ctxweaver recognizes the following types as context carriers (checks the **first
 
 | Type | Accessor | Notes |
 |------|----------|-------|
-| `context.Context` | (none) | Standard library |
-| `echo.Context` | `.Request().Context()` | Echo framework |
-| `*cli.Context` | `.Context` | urfave/cli |
-| `*cobra.Command` | `.Context()` | Cobra |
-| `*gin.Context` | `.Request.Context()` | Gin |
-| `*fiber.Ctx` | `.Context()` | Fiber |
+| [`context.Context`](https://pkg.go.dev/context#Context) | (none) | Standard library |
+| [`echo.Context`](https://pkg.go.dev/github.com/labstack/echo/v4#Context) | `.Request().Context()` | Echo framework |
+| [`*cli.Context`](https://pkg.go.dev/github.com/urfave/cli/v2#Context) | `.Context` | urfave/cli |
+| [`*cobra.Command`](https://pkg.go.dev/github.com/spf13/cobra#Command) | `.Context()` | Cobra |
+| [`*gin.Context`](https://pkg.go.dev/github.com/gin-gonic/gin#Context) | `.Request.Context()` | Gin |
+| [`*fiber.Ctx`](https://pkg.go.dev/github.com/gofiber/fiber/v2#Ctx) | `.Context()` | Fiber |
 
 ### Custom Carriers
 
@@ -355,6 +355,11 @@ Commands run sequentially after processing. If any command fails, an error is re
 
 Use the `-no-hooks` flag to skip hooks (useful for CI or when running ctxweaver as part of a larger pipeline).
 
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md) - Technical specification and design decisions
+- [CLAUDE.md](./CLAUDE.md) - AI assistant guidance for development
+
 ## Development
 
 ```bash
@@ -367,6 +372,12 @@ go build -o bin/ctxweaver ./cmd/ctxweaver
 # Run on a project
 ./bin/ctxweaver -config=ctxweaver.yaml ./...
 ```
+
+## Related Tools
+
+- [goroutinectx](https://github.com/mpyw/goroutinectx) - Goroutine context propagation linter
+- [zerologlintctx](https://github.com/mpyw/zerologlintctx) - Zerolog context propagation linter
+- [gormreuse](https://github.com/mpyw/gormreuse) - GORM instance reuse linter
 
 ## License
 
