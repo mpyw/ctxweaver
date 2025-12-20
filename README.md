@@ -90,13 +90,13 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 
 | Option | Type | Required | Default | Description |
 |--------|------|:--------:|---------|-------------|
-| `template` | `string` or `{file: string}` | ✅ | | Go template for the statement to insert (inline or file path) |
+| `template` | `string \| {file: string}` | ✅ | | Go template for the statement to insert (inline or file path) |
 | `imports` | `[]string` | | `[]` | Import paths to add when statement is inserted |
 | `packages.patterns` | `[]string` | ✅ | | Package patterns to process (overridden by CLI args) |
 | `packages.regexps.only` | `[]string` | | `[]` | Only process packages matching these regex patterns |
 | `packages.regexps.omit` | `[]string` | | `[]` | Skip packages matching these regex patterns |
-| `functions.types` | `[]string` | | `["function", "method"]` | Function types to process |
-| `functions.scopes` | `[]string` | | `["exported", "unexported"]` | Function scopes to process |
+| `functions.types` | `[]FuncType` | | `["function", "method"]` | Enum: `"function"` \| `"method"` |
+| `functions.scopes` | `[]FuncScope` | | `["exported", "unexported"]` | Enum: `"exported"` \| `"unexported"` |
 | `functions.regexps.only` | `[]string` | | `[]` | Only process functions matching these regex patterns |
 | `functions.regexps.omit` | `[]string` | | `[]` | Skip functions matching these regex patterns |
 | `test` | `bool` | | `false` | Whether to process test files (overridden by `-test` flag) |
@@ -136,15 +136,15 @@ Control which functions are processed using type, scope, and regex filters:
 
 ```yaml
 functions:
-  # Filter by function type (default: all)
+  # Filter by function type (enum, default: both)
   types:
-    - function  # Top-level functions
-    - method    # Methods with receivers
+    - function  # "function": Top-level functions without receivers
+    - method    # "method": Methods with receivers
 
-  # Filter by export scope (default: all)
+  # Filter by export scope (enum, default: both)
   scopes:
-    - exported    # Public functions (e.g., GetUser)
-    - unexported  # Private functions (e.g., parseInput)
+    - exported    # "exported": Public functions (e.g., GetUser)
+    - unexported  # "unexported": Private functions (e.g., parseInput)
 
   # Regex filters on function names
   regexps:
