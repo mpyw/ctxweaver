@@ -63,7 +63,7 @@ go run github.com/mpyw/ctxweaver/cmd/ctxweaver@latest ./...
 ```
 
 > [!CAUTION]
-> To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.3.0`).
+> To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.4.0`).
 
 ## Configuration
 
