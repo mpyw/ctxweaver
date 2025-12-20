@@ -77,7 +77,7 @@ func (t *Template) UnmarshalYAML(value *yaml.Node) error {
 			File string `yaml:"file"`
 		}
 		if err := value.Decode(&obj); err != nil {
-			return err
+			return err // unreachable via LoadConfig: schema validation catches malformed objects first
 		}
 		t.File = obj.File
 		return nil
@@ -226,6 +226,8 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Unmarshal directly into struct
+	// This error is unreachable in normal flow: if schema validation passes,
+	// struct unmarshaling should succeed. Only reachable if schema and struct diverge.
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)

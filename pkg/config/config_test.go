@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestNewCarrierRegistry(t *testing.T) {
@@ -548,6 +550,105 @@ packages:
 			}
 		})
 	}
+}
+
+func TestTemplate_UnmarshalYAML_InvalidType(t *testing.T) {
+	// Test that template as array/other type returns error via schema validation
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	// Template as array (invalid)
+	configContent := `template:
+  - item1
+  - item2
+packages:
+  patterns:
+    - ./...
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for template as array")
+	}
+	// Schema validation catches this before UnmarshalYAML
+	if !strings.Contains(err.Error(), "template") {
+		t.Errorf("error should mention 'template', got: %v", err)
+	}
+}
+
+func TestTemplate_UnmarshalYAML_DirectInvalidType(t *testing.T) {
+	// Directly test UnmarshalYAML with invalid node types (bypassing schema validation)
+	// This tests the library API when used directly without LoadConfig
+	var tmpl Template
+
+	// Test with sequence node (array)
+	seqNode := &yaml.Node{
+		Kind: yaml.SequenceNode,
+	}
+	err := tmpl.UnmarshalYAML(seqNode)
+	if err == nil {
+		t.Error("expected error for sequence node")
+	}
+	if !strings.Contains(err.Error(), "template must be a string or an object with 'file' field") {
+		t.Errorf("error should mention expected format, got: %v", err)
+	}
+}
+
+func TestTemplate_Content_FileReadFailure(t *testing.T) {
+	tmpl := Template{
+		File: "/nonexistent/path/template.txt",
+	}
+
+	_, err := tmpl.Content()
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+	if !strings.Contains(err.Error(), "failed to read template file") {
+		t.Errorf("error should mention 'failed to read template file', got: %v", err)
+	}
+}
+
+func TestTemplate_Content_EmptyTemplate(t *testing.T) {
+	tmpl := Template{}
+
+	_, err := tmpl.Content()
+	if err == nil {
+		t.Error("expected error for empty template")
+	}
+	if !strings.Contains(err.Error(), "template is empty") {
+		t.Errorf("error should mention 'template is empty', got: %v", err)
+	}
+}
+
+func TestTemplate_MarshalYAML(t *testing.T) {
+	t.Run("marshal inline template", func(t *testing.T) {
+		tmpl := Template{Inline: "defer trace({{.Ctx}})"}
+		result, err := tmpl.MarshalYAML()
+		if err != nil {
+			t.Fatalf("MarshalYAML() error = %v", err)
+		}
+		if result != "defer trace({{.Ctx}})" {
+			t.Errorf("MarshalYAML() = %v, want inline string", result)
+		}
+	})
+
+	t.Run("marshal file reference", func(t *testing.T) {
+		tmpl := Template{File: "./template.txt"}
+		result, err := tmpl.MarshalYAML()
+		if err != nil {
+			t.Fatalf("MarshalYAML() error = %v", err)
+		}
+		mapResult, ok := result.(map[string]string)
+		if !ok {
+			t.Errorf("MarshalYAML() = %T, want map[string]string", result)
+		}
+		if mapResult["file"] != "./template.txt" {
+			t.Errorf("MarshalYAML()[file] = %v, want ./template.txt", mapResult["file"])
+		}
+	})
 }
 
 func TestLoadConfig_DefaultValues(t *testing.T) {

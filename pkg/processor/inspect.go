@@ -19,6 +19,8 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 }
 
 // isExportedFunc checks if a function name is exported (starts with uppercase).
+// The empty name check is defensive: Go parser rejects functions without names,
+// so this branch is unreachable in normal operation.
 func isExportedFunc(name string) bool {
 	if name == "" {
 		return false
