@@ -2,8 +2,11 @@
 package processor
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 
+	"github.com/mpyw/ctxweaver/internal"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
@@ -53,13 +56,16 @@ func WithRemove(remove bool) Option {
 
 // WithExclude sets regex patterns for package paths to exclude.
 // Each pattern is compiled as a regular expression.
-// Returns an error via the Option if any pattern fails to compile.
+// Invalid patterns are skipped with a warning to stderr.
 func WithExclude(patterns []string) Option {
 	return func(p *Processor) {
 		for _, pattern := range patterns {
 			re, err := regexp.Compile(pattern)
 			if err != nil {
-				// Skip invalid patterns (will be validated at config load time)
+				fmt.Fprintf(os.Stderr, "%swarning:%s invalid exclude pattern %q: %v\n",
+					internal.StderrColor(internal.ColorYellow),
+					internal.StderrColor(internal.ColorReset),
+					pattern, err)
 				continue
 			}
 			p.exclude = append(p.exclude, re)
