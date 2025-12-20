@@ -54,10 +54,10 @@ func WithRemove(remove bool) Option {
 	}
 }
 
-// WithExclude sets regex patterns for package paths to exclude.
+// WithExcludeRegexps sets regex patterns for package paths to exclude.
 // Each pattern is compiled as a regular expression.
 // Invalid patterns are skipped with a warning to stderr.
-func WithExclude(patterns []string) Option {
+func WithExcludeRegexps(patterns []string) Option {
 	return func(p *Processor) {
 		for _, pattern := range patterns {
 			re, err := regexp.Compile(pattern)

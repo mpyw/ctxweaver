@@ -1,6 +1,7 @@
 package processor_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -275,7 +276,7 @@ func Handle(ctx context.Context) {
 		})
 
 		// Exclude packages containing "internal"
-		proc := processor.New(registry, tmpl, nil, processor.WithExclude([]string{"/internal/"}))
+		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"/internal/"}))
 
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
@@ -333,7 +334,7 @@ func Get(ctx context.Context) {
 		})
 
 		// Exclude packages containing "internal" or "mock"
-		proc := processor.New(registry, tmpl, nil, processor.WithExclude([]string{"/internal/", "/mock$"}))
+		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"/internal/", "/mock$"}))
 
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
@@ -369,7 +370,7 @@ func Get(ctx context.Context) {
 		})
 
 		// Empty exclude patterns
-		proc := processor.New(registry, tmpl, nil, processor.WithExclude([]string{}))
+		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{}))
 
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
@@ -383,6 +384,52 @@ func Get(ctx context.Context) {
 		// Should process all files
 		if result.FilesProcessed != 2 {
 			t.Errorf("FilesProcessed = %d, want 2", result.FilesProcessed)
+		}
+	})
+
+	t.Run("invalid regex pattern warns and skips", func(t *testing.T) {
+		tmpDir := setupTestModule(t, map[string]string{
+			"main.go": `package main
+
+import "context"
+
+func Foo(ctx context.Context) {
+}
+`,
+		})
+
+		// Capture stderr
+		oldStderr := os.Stderr
+		r, w, _ := os.Pipe()
+		os.Stderr = w
+
+		// Invalid regex pattern: unclosed bracket
+		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"[invalid"}))
+
+		// Restore stderr and read captured output
+		w.Close()
+		os.Stderr = oldStderr
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		captured := buf.String()
+
+		// Verify warning was printed
+		if !strings.Contains(captured, "warning:") || !strings.Contains(captured, "[invalid") {
+			t.Errorf("expected warning for invalid pattern, got: %q", captured)
+		}
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		// Should still process files (invalid pattern is skipped)
+		result, err := proc.Process([]string{"./..."})
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		if result.FilesProcessed != 1 {
+			t.Errorf("FilesProcessed = %d, want 1", result.FilesProcessed)
 		}
 	})
 }

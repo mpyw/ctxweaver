@@ -105,7 +105,7 @@ func run() error {
 		processor.WithDryRun(dryRun),
 		processor.WithVerbose(verbose && !silent),
 		processor.WithRemove(remove),
-		processor.WithExclude(cfg.ExcludeRegexps),
+		processor.WithExcludeRegexps(cfg.ExcludeRegexps),
 	)
 
 	// Print ctxweaver execution header
