@@ -85,10 +85,10 @@ func run() error {
 	}
 
 	// Create carrier registry
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(cfg.Carriers.UseDefault())
 
 	// Register custom carriers from config
-	for _, c := range cfg.Carriers {
+	for _, c := range cfg.Carriers.Custom {
 		registry.Register(c)
 	}
 

@@ -100,7 +100,7 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 | `functions.regexps.only` | `[]string` | | `[]` | Only process functions matching these regex patterns |
 | `functions.regexps.omit` | `[]string` | | `[]` | Skip functions matching these regex patterns |
 | `test` | `bool` | | `false` | Whether to process test files (overridden by `-test` flag) |
-| `carriers` | `[]object` | | `[]` | Custom context carrier definitions |
+| `carriers` | `[]Carrier \| CarriersConfig` | | `[]` | Context carrier configuration (see below) |
 | `hooks.pre` | `[]string` | | `[]` | Shell commands to run before processing |
 | `hooks.post` | `[]string` | | `[]` | Shell commands to run after processing |
 
@@ -327,11 +327,39 @@ ctxweaver recognizes the following types as context carriers (checks the **first
 Add custom carriers in your config file:
 
 ```yaml
+# Simple form: array of carriers (default carriers remain enabled)
 carriers:
   - package: github.com/example/myapp/pkg/web
     type: Context
     accessor: .Ctx()
 ```
+
+To disable default carriers and use only custom ones:
+
+```yaml
+# Extended form: object with custom carriers and default toggle
+carriers:
+  custom:
+    - package: github.com/example/myapp/pkg/web
+      type: Context
+      accessor: .Ctx()
+  default: false  # Disable built-in carriers
+```
+
+#### Carrier Schema
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `package` | `string` | ✅ | Import path of the package containing the type |
+| `type` | `string` | ✅ | Name of the type |
+| `accessor` | `string` | | Expression to extract `context.Context` (e.g., `.Context()`) |
+
+#### CarriersConfig Schema (Extended Form)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `custom` | `[]Carrier` | `[]` | Custom carrier definitions |
+| `default` | `bool` | `true` | Whether to include built-in default carriers |
 
 ## Directives
 

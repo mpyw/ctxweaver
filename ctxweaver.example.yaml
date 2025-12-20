@@ -86,7 +86,7 @@ packages:
 # Can be overridden by --test flag.
 test: false
 
-# Custom context carrier definitions.
+# Context carrier configuration.
 # ctxweaver comes with built-in support for common carriers:
 #   - context.Context
 #   - *http.Request (net/http)
@@ -96,11 +96,19 @@ test: false
 #   - cli.Context (github.com/urfave/cli/v2)
 #   - *cobra.Command (github.com/spf13/cobra)
 #
-# Add custom carriers here for your own types that wrap context.Context.
-carriers:
+# Simple form: array of custom carriers (default carriers remain enabled)
+carriers: []
   # - package: github.com/example/myframework
   #   type: Context
   #   accessor: .Context()  # How to extract context.Context from this type
+
+# Extended form: disable default carriers and use only custom ones
+# carriers:
+#   custom:
+#     - package: github.com/example/myframework
+#       type: Context
+#       accessor: .Context()
+#   default: false  # Set to false to disable built-in carriers
 
 # Shell commands to run before and after processing.
 # Use --no-hooks flag to skip hooks (useful for CI).

@@ -42,7 +42,7 @@ func setupTestModule(t *testing.T, files map[string]string) string {
 // Transformation tests (before -> after) are in processor_insertion_test.go using testdata.
 func TestProcess_Options(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(true)
 
 	t.Run("dry-run mode does not modify files", func(t *testing.T) {
 		tmpDir := setupTestModule(t, map[string]string{
@@ -136,7 +136,7 @@ func Foo(ctx context.Context) {
 // TestProcess_TestFiles tests the behavior of processing test files.
 func TestProcess_TestFiles(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(true)
 
 	t.Run("skip test files by default", func(t *testing.T) {
 		tmpDir := setupTestModule(t, map[string]string{
@@ -210,7 +210,7 @@ func TestBar(ctx context.Context) {
 // TestProcess_SkipTestdataDirectory tests that testdata directories are skipped.
 func TestProcess_SkipTestdataDirectory(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(true)
 
 	tmpDir := setupTestModule(t, map[string]string{
 		"main.go": `package main
@@ -248,7 +248,7 @@ func Fixture(ctx context.Context) {
 // TestProcess_ExcludeRegexps tests package exclusion by regex patterns.
 func TestProcess_ExcludeRegexps(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(true)
 
 	t.Run("exclude packages matching regex", func(t *testing.T) {
 		tmpDir := setupTestModule(t, map[string]string{
@@ -592,7 +592,7 @@ func Foo(ctx context.Context) {
 // TestProcess_FunctionFiltering tests function filtering by type, scope, and regex.
 func TestProcess_FunctionFiltering(t *testing.T) {
 	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(true)
 
 	t.Run("filter by function type - functions only", func(t *testing.T) {
 		tmpDir := setupTestModule(t, map[string]string{

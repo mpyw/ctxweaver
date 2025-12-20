@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewCarrierRegistry(t *testing.T) {
-	r := NewCarrierRegistry()
+	r := NewCarrierRegistry(true)
 
 	// Check default carriers are loaded
 	tests := map[string]struct {
@@ -149,13 +149,16 @@ test: true
 	}
 
 	// Check carriers
-	if len(cfg.Carriers) != 1 {
-		t.Errorf("Carriers count = %d, want 1", len(cfg.Carriers))
+	if len(cfg.Carriers.Custom) != 1 {
+		t.Errorf("Carriers.Custom count = %d, want 1", len(cfg.Carriers.Custom))
 	} else {
-		c := cfg.Carriers[0]
+		c := cfg.Carriers.Custom[0]
 		if c.Package != "github.com/example/custom" || c.Type != "Context" || c.Accessor != ".GetContext()" {
 			t.Errorf("Carrier = %+v, unexpected", c)
 		}
+	}
+	if !cfg.Carriers.UseDefault() {
+		t.Error("Carriers.UseDefault() should be true by default")
 	}
 
 	// Check patterns
@@ -206,7 +209,7 @@ packages:
 }
 
 func TestCarrierRegistry_All(t *testing.T) {
-	r := NewCarrierRegistry()
+	r := NewCarrierRegistry(true)
 
 	all := r.All()
 	if len(all) == 0 {
@@ -649,6 +652,173 @@ func TestTemplate_MarshalYAML(t *testing.T) {
 			t.Errorf("MarshalYAML()[file] = %v, want ./template.txt", mapResult["file"])
 		}
 	})
+}
+
+func TestCarriers_UnmarshalYAML(t *testing.T) {
+	t.Run("simple array form", func(t *testing.T) {
+		yamlContent := `
+carriers:
+  - package: github.com/example/custom
+    type: Context
+    accessor: .GetContext()
+`
+		var cfg struct {
+			Carriers Carriers `yaml:"carriers"`
+		}
+		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(cfg.Carriers.Custom) != 1 {
+			t.Errorf("Custom count = %d, want 1", len(cfg.Carriers.Custom))
+		}
+		if !cfg.Carriers.UseDefault() {
+			t.Error("UseDefault() should be true for simple form")
+		}
+	})
+
+	t.Run("extended form with default true", func(t *testing.T) {
+		yamlContent := `
+carriers:
+  custom:
+    - package: github.com/example/custom
+      type: Context
+  default: true
+`
+		var cfg struct {
+			Carriers Carriers `yaml:"carriers"`
+		}
+		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(cfg.Carriers.Custom) != 1 {
+			t.Errorf("Custom count = %d, want 1", len(cfg.Carriers.Custom))
+		}
+		if !cfg.Carriers.UseDefault() {
+			t.Error("UseDefault() should be true")
+		}
+	})
+
+	t.Run("extended form with default false", func(t *testing.T) {
+		yamlContent := `
+carriers:
+  custom:
+    - package: github.com/example/custom
+      type: Context
+  default: false
+`
+		var cfg struct {
+			Carriers Carriers `yaml:"carriers"`
+		}
+		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(cfg.Carriers.Custom) != 1 {
+			t.Errorf("Custom count = %d, want 1", len(cfg.Carriers.Custom))
+		}
+		if cfg.Carriers.UseDefault() {
+			t.Error("UseDefault() should be false")
+		}
+	})
+
+	t.Run("extended form with empty custom", func(t *testing.T) {
+		yamlContent := `
+carriers:
+  default: false
+`
+		var cfg struct {
+			Carriers Carriers `yaml:"carriers"`
+		}
+		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(cfg.Carriers.Custom) != 0 {
+			t.Errorf("Custom count = %d, want 0", len(cfg.Carriers.Custom))
+		}
+		if cfg.Carriers.UseDefault() {
+			t.Error("UseDefault() should be false")
+		}
+	})
+}
+
+func TestCarriers_UnmarshalYAML_DirectInvalidType(t *testing.T) {
+	var carriers Carriers
+	scalarNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "invalid"}
+	err := carriers.UnmarshalYAML(scalarNode)
+	if err == nil {
+		t.Error("expected error for scalar node")
+	}
+	if err.Error() != "carriers must be an array or an object with 'custom' and 'default' fields" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestCarriers_MarshalYAML(t *testing.T) {
+	t.Run("marshal simple form", func(t *testing.T) {
+		carriers := Carriers{
+			Custom: []CarrierDef{{Package: "pkg", Type: "T"}},
+		}
+		result, err := carriers.MarshalYAML()
+		if err != nil {
+			t.Fatalf("MarshalYAML() error = %v", err)
+		}
+		arr, ok := result.([]CarrierDef)
+		if !ok {
+			t.Errorf("MarshalYAML() = %T, want []CarrierDef", result)
+		}
+		if len(arr) != 1 {
+			t.Errorf("MarshalYAML() len = %d, want 1", len(arr))
+		}
+	})
+
+	t.Run("marshal extended form with default set", func(t *testing.T) {
+		defaultVal := false
+		carriers := Carriers{
+			Custom:  []CarrierDef{{Package: "pkg", Type: "T"}},
+			Default: &defaultVal,
+		}
+		result, err := carriers.MarshalYAML()
+		if err != nil {
+			t.Fatalf("MarshalYAML() error = %v", err)
+		}
+		mapResult, ok := result.(map[string]any)
+		if !ok {
+			t.Errorf("MarshalYAML() = %T, want map[string]any", result)
+		}
+		if mapResult["default"] != false {
+			t.Errorf("MarshalYAML()[default] = %v, want false", mapResult["default"])
+		}
+	})
+}
+
+func TestLoadConfig_CarriersExtendedForm(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+carriers:
+  custom:
+    - package: github.com/example/custom
+      type: Context
+  default: false
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if len(cfg.Carriers.Custom) != 1 {
+		t.Errorf("Carriers.Custom count = %d, want 1", len(cfg.Carriers.Custom))
+	}
+	if cfg.Carriers.UseDefault() {
+		t.Error("Carriers.UseDefault() should be false")
+	}
 }
 
 func TestLoadConfig_DefaultValues(t *testing.T) {

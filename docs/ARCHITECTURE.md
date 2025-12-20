@@ -119,10 +119,18 @@ functions:
     only: []      # Regex patterns - only process matching (empty = all)
     omit: []      # Regex patterns - skip matching
 
+# Simple form (array)
 carriers:
   - package: github.com/custom/ctx
     type: Context
     accessor: .GetContext()
+
+# Extended form (disable defaults)
+# carriers:
+#   custom:
+#     - package: github.com/custom/ctx
+#       type: Context
+#   default: false
 
 test: false
 ```
@@ -137,7 +145,31 @@ test: false
 - Clear separation from user config
 - Users can override or extend
 
-### 5. Template Union Type
+### 5. Carriers Union Type
+
+**Decision**: Support both simple array and extended object forms for carriers.
+
+**Rationale**:
+- Simple form covers most use cases (add custom carriers while keeping defaults)
+- Extended form allows disabling default carriers for full control
+- Consistent with template union type pattern
+
+**Implementation**:
+```yaml
+# Simple array (default carriers enabled)
+carriers:
+  - package: github.com/custom/ctx
+    type: Context
+
+# Extended object (control default carriers)
+carriers:
+  custom:
+    - package: github.com/custom/ctx
+      type: Context
+  default: false  # Disable built-in carriers
+```
+
+### 6. Template Union Type
 
 **Decision**: Support both inline strings and file references for templates.
 
@@ -158,7 +190,7 @@ template:
   file: ./templates/trace.tmpl
 ```
 
-### 6. First Parameter Only
+### 7. First Parameter Only
 
 **Decision**: Only check the first function parameter for context carriers.
 
@@ -168,7 +200,7 @@ template:
 - Avoids ambiguity with multiple context-like parameters
 - Reduces false positives
 
-### 7. Statement Pattern Detection
+### 8. Statement Pattern Detection
 
 **Decision**: Detect existing statements by structural pattern matching.
 
@@ -180,7 +212,7 @@ template:
 **Current implementation**: Specific to `defer XXX.StartSegment(ctx, "name").End()` pattern.
 Future work could generalize this.
 
-### 8. No Built-in Import Ordering
+### 9. No Built-in Import Ordering
 
 **Decision**: Do not integrate `gci` or implement import ordering.
 
@@ -190,7 +222,7 @@ Future work could generalize this.
 - `goimports`/`gci` do this well
 - Reduces complexity and dependencies
 
-### 9. CLI Override Behavior
+### 10. CLI Override Behavior
 
 **Decision**: CLI arguments override (not merge) config file values.
 

@@ -109,6 +109,66 @@ func (t *Template) Content() (string, error) {
 	return "", fmt.Errorf("template is empty")
 }
 
+// Carriers can be a simple array of CarrierDef or an object with custom/default fields.
+// Simple form: carriers: []
+// Extended form: carriers: { custom: [], default: true }
+type Carriers struct {
+	// Custom are user-defined carrier definitions
+	Custom []CarrierDef
+	// Default indicates whether to include default carriers (default: true)
+	Default *bool
+}
+
+// UseDefault returns whether default carriers should be used.
+func (c *Carriers) UseDefault() bool {
+	if c.Default == nil {
+		return true // default is true
+	}
+	return *c.Default
+}
+
+// UnmarshalYAML implements custom unmarshaling for Carriers.
+// Accepts either an array (simple form) or an object with "custom" and "default" fields.
+func (c *Carriers) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.SequenceNode:
+		// Simple array form: carriers: []
+		var arr []CarrierDef
+		if err := value.Decode(&arr); err != nil {
+			return err // unreachable via LoadConfig: schema validation catches malformed arrays first
+		}
+		c.Custom = arr
+		return nil
+	case yaml.MappingNode:
+		// Extended object form: carriers: { custom: [], default: true }
+		var obj struct {
+			Custom  []CarrierDef `yaml:"custom"`
+			Default *bool        `yaml:"default"`
+		}
+		if err := value.Decode(&obj); err != nil {
+			return err // unreachable via LoadConfig: schema validation catches malformed objects first
+		}
+		c.Custom = obj.Custom
+		c.Default = obj.Default
+		return nil
+	default:
+		return fmt.Errorf("carriers must be an array or an object with 'custom' and 'default' fields")
+	}
+}
+
+// MarshalYAML implements custom marshaling for Carriers.
+func (c Carriers) MarshalYAML() (any, error) {
+	// If Default is explicitly set (not nil), use object form
+	if c.Default != nil {
+		return map[string]any{
+			"custom":  c.Custom,
+			"default": *c.Default,
+		}, nil
+	}
+	// Otherwise use simple array form
+	return c.Custom, nil
+}
+
 // Regexps defines regex patterns for filtering.
 type Regexps struct {
 	// Only includes items matching these patterns (if specified)
@@ -157,8 +217,8 @@ type Config struct {
 	Template Template `yaml:"template" json:"template"`
 	// Imports are the imports to add when the template is inserted
 	Imports []string `yaml:"imports" json:"imports,omitempty"`
-	// Carriers are additional context carrier definitions
-	Carriers []CarrierDef `yaml:"carriers" json:"carriers,omitempty"`
+	// Carriers defines context carrier configuration (custom carriers and default toggle)
+	Carriers Carriers `yaml:"carriers" json:"carriers,omitempty"`
 	// Packages defines package filtering options
 	Packages Packages `yaml:"packages" json:"packages"`
 	// Functions defines function filtering options
@@ -174,13 +234,15 @@ type CarrierRegistry struct {
 	carriers map[string]CarrierDef // key: "package.Type"
 }
 
-// NewCarrierRegistry creates a registry with default carriers loaded.
-func NewCarrierRegistry() *CarrierRegistry {
+// NewCarrierRegistry creates a registry, optionally loading default carriers.
+func NewCarrierRegistry(includeDefaults bool) *CarrierRegistry {
 	r := &CarrierRegistry{
 		carriers: make(map[string]CarrierDef),
 	}
-	for _, c := range defaultCarriers {
-		r.Register(c)
+	if includeDefaults {
+		for _, c := range defaultCarriers {
+			r.Register(c)
+		}
 	}
 	return r
 }
