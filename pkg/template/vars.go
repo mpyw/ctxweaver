@@ -20,6 +20,9 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 		FuncBaseName: decl.Name.Name,
 	}
 
+	// Check if the function itself has type parameters
+	funcHasTypeParams := decl.Type.TypeParams != nil && len(decl.Type.TypeParams.List) > 0
+
 	// Build fully qualified function name
 	if decl.Recv != nil && len(decl.Recv.List) > 0 {
 		vars.IsMethod = true
@@ -29,20 +32,74 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 			vars.ReceiverVar = recv.Names[0].Name
 		}
 
-		switch typ := recv.Type.(type) {
+		// Extract receiver type name and check for generics
+		recvTypeName, recvHasGenerics := extractReceiverTypeName(recv.Type)
+		vars.ReceiverType = recvTypeName
+
+		switch recv.Type.(type) {
 		case *dst.StarExpr:
 			vars.IsPointerReceiver = true
-			if ident, ok := typ.X.(*dst.Ident); ok {
-				vars.ReceiverType = ident.Name
-				vars.FuncName = fmt.Sprintf("%s.(*%s).%s", vars.PackageName, ident.Name, decl.Name.Name)
+			if recvHasGenerics {
+				vars.FuncName = fmt.Sprintf("%s.(*%s[...]).%s", vars.PackageName, recvTypeName, decl.Name.Name)
+			} else {
+				vars.FuncName = fmt.Sprintf("%s.(*%s).%s", vars.PackageName, recvTypeName, decl.Name.Name)
 			}
-		case *dst.Ident:
-			vars.ReceiverType = typ.Name
-			vars.FuncName = fmt.Sprintf("%s.%s.%s", vars.PackageName, typ.Name, decl.Name.Name)
+		default:
+			if recvHasGenerics {
+				vars.FuncName = fmt.Sprintf("%s.%s[...].%s", vars.PackageName, recvTypeName, decl.Name.Name)
+			} else {
+				vars.FuncName = fmt.Sprintf("%s.%s.%s", vars.PackageName, recvTypeName, decl.Name.Name)
+			}
 		}
 	} else {
-		vars.FuncName = fmt.Sprintf("%s.%s", vars.PackageName, decl.Name.Name)
+		// Regular function (not a method)
+		if funcHasTypeParams {
+			vars.FuncName = fmt.Sprintf("%s.%s[...]", vars.PackageName, decl.Name.Name)
+		} else {
+			vars.FuncName = fmt.Sprintf("%s.%s", vars.PackageName, decl.Name.Name)
+		}
 	}
 
 	return vars
+}
+
+// extractReceiverTypeName extracts the base type name from a receiver type expression.
+// It handles regular types, pointer types, and generic types (IndexExpr, IndexListExpr).
+// Returns the type name and a boolean indicating whether it has type parameters.
+func extractReceiverTypeName(expr dst.Expr) (name string, hasGenerics bool) {
+	// Unwrap pointer if present
+	if star, ok := expr.(*dst.StarExpr); ok {
+		expr = star.X
+	}
+
+	switch t := expr.(type) {
+	case *dst.Ident:
+		// Simple type: T
+		return t.Name, false
+
+	case *dst.IndexExpr:
+		// Generic type with single type parameter: T[X]
+		if ident, ok := t.X.(*dst.Ident); ok {
+			return ident.Name, true
+		}
+		// Nested generics: T[X[Y]] - recursively extract the outermost type name
+		if inner, ok := t.X.(*dst.IndexExpr); ok {
+			name, _ := extractReceiverTypeName(inner)
+			return name, true
+		}
+		if inner, ok := t.X.(*dst.IndexListExpr); ok {
+			name, _ := extractReceiverTypeName(inner)
+			return name, true
+		}
+
+	case *dst.IndexListExpr:
+		// Generic type with multiple type parameters: T[X, Y]
+		// Note: t.X is always *dst.Ident because T[X, Y][Z] is syntactically invalid in Go.
+		// Nesting occurs in Indices (e.g., T[X, Y[Z]]), not in X.
+		if ident, ok := t.X.(*dst.Ident); ok {
+			return ident.Name, true
+		}
+	}
+
+	return "", false
 }
