@@ -108,6 +108,40 @@ defer trace({{.Ctx}})`,
 			want: `// function
 defer trace(ctx)`,
 		},
+		"generic receiver": {
+			template: `{{if .IsGenericReceiver}}// generic type{{end}}
+defer trace({{.Ctx}}, {{.FuncName | quote}})`,
+			vars: Vars{
+				Ctx:               "ctx",
+				FuncName:          "pkg.(*Container[...]).Process",
+				ReceiverType:      "Container",
+				IsMethod:          true,
+				IsPointerReceiver: true,
+				IsGenericReceiver: true,
+			},
+			want: `// generic type
+defer trace(ctx, "pkg.(*Container[...]).Process")`,
+		},
+		"generic function": {
+			template: `{{if .IsGenericFunc}}// generic func{{end}}
+defer trace({{.Ctx}}, {{.FuncName | quote}})`,
+			vars: Vars{
+				Ctx:           "ctx",
+				FuncName:      "pkg.Transform[...]",
+				FuncBaseName:  "Transform",
+				IsGenericFunc: true,
+			},
+			want: `// generic func
+defer trace(ctx, "pkg.Transform[...]")`,
+		},
+		"conditional generic handling": {
+			template: `{{if or .IsGenericFunc .IsGenericReceiver}}// has generics{{else}}// no generics{{end}}`,
+			vars: Vars{
+				IsGenericFunc:     false,
+				IsGenericReceiver: true,
+			},
+			want: `// has generics`,
+		},
 	}
 
 	for name, tt := range tests {

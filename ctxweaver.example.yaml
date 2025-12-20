@@ -16,15 +16,20 @@
 #   - {{.ReceiverType}}      : Receiver type name for methods (e.g., "MyService")
 #   - {{.ReceiverVar}}       : Receiver variable name for methods (e.g., "s")
 #   - {{.IsPointerReceiver}} : true if the receiver is a pointer
+#   - {{.IsGenericFunc}}     : true if the function has type parameters
+#   - {{.IsGenericReceiver}} : true if the receiver type has type parameters
 #
 # Built-in template functions:
 #   - quote    : Wraps value in double quotes (e.g., {{.FuncName | quote}} -> "pkg.Func")
 #   - backtick : Wraps value in backticks (e.g., {{.FuncName | backtick}} -> `pkg.Func`)
 #
 # FuncName format examples:
-#   - Function:                  "service.CreateUser"
-#   - Method (pointer receiver): "service.(*UserService).GetByID"
-#   - Method (value receiver):   "service.UserService.String"
+#   - Function:                       "service.CreateUser"
+#   - Method (pointer receiver):      "service.(*UserService).GetByID"
+#   - Method (value receiver):        "service.UserService.String"
+#   - Generic function:               "service.Process[...]"
+#   - Generic method (pointer):       "service.(*Container[...]).Get"
+#   - Generic method (value):         "service.Wrapper[...].Unwrap"
 template: |
   defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()
 

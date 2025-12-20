@@ -31,6 +31,10 @@ type Vars struct {
 	IsMethod bool
 	// IsPointerReceiver indicates whether the receiver is a pointer
 	IsPointerReceiver bool
+	// IsGenericFunc indicates whether the function has type parameters
+	IsGenericFunc bool
+	// IsGenericReceiver indicates whether the receiver type has type parameters
+	IsGenericReceiver bool
 }
 
 // Template wraps a parsed template for statement generation.
