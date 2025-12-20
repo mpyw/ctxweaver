@@ -441,3 +441,38 @@ func Fixture(ctx context.Context) {
 		}
 	})
 }
+
+
+func TestProcess_RemoveModeNothingToRemove(t *testing.T) {
+	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
+	registry := config.NewCarrierRegistry()
+
+	// Code without the target statement - nothing to remove
+	tmpDir := setupTestModule(t, map[string]string{
+		"main.go": `package main
+
+import "context"
+
+func Foo(ctx context.Context) {
+	// No defer trace(ctx) here
+	println("hello")
+}
+`,
+	})
+
+	proc := processor.New(registry, tmpl, nil, processor.WithRemove(true))
+
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	result, err := proc.Process([]string{"./..."})
+	if err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	// No files should be modified since there's nothing to remove
+	if result.FilesModified != 0 {
+		t.Errorf("FilesModified = %d, want 0 (nothing to remove)", result.FilesModified)
+	}
+}

@@ -323,6 +323,33 @@ func TestLoadConfig_WrongType(t *testing.T) {
 	}
 }
 
+
+func TestLoadConfig_NonExistentFile(t *testing.T) {
+	_, err := LoadConfig("/nonexistent/path/config.yaml")
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
+func TestLoadConfig_InvalidYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	// Invalid YAML syntax (bad indentation, unclosed quote)
+	configContent := `template: "defer trace({{.Ctx}})
+  imports:
+- broken
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	_, err := LoadConfig(configPath)
+	if err == nil {
+		t.Error("expected error for invalid YAML syntax")
+	}
+}
+
 func TestLoadConfig_WithHooks(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
