@@ -1,4 +1,6 @@
-# Design Document
+# ctxweaver Architecture
+
+This document describes the architecture and design decisions of ctxweaver.
 
 ## Goals
 
@@ -174,7 +176,7 @@ Future work could generalize this.
 |----------|--------|---------|
 | `Ctx` | carrier.BuildContextExpr(varName) | `ctx`, `c.Request().Context()` |
 | `CtxVar` | param.Names[0].Name | `ctx`, `c` |
-| `FuncName` | naming logic | `(*pkg.Service).Method` |
+| `FuncName` | naming logic | `pkg.(*Service).Method` |
 | `PackageName` | df.Name.Name | `service` |
 | `PackagePath` | pkg.PkgPath | `github.com/example/myapp/pkg/service` |
 | `FuncBaseName` | decl.Name.Name | `Method` |
@@ -182,6 +184,8 @@ Future work could generalize this.
 | `ReceiverVar` | recv.Names[0].Name | `s` |
 | `IsMethod` | decl.Recv != nil | `true` |
 | `IsPointerReceiver` | receiver is *Type | `true` |
+| `IsGenericFunc` | decl.Type.TypeParams != nil | `true` |
+| `IsGenericReceiver` | receiver has type params | `true` |
 
 ## Error Handling
 
