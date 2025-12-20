@@ -55,6 +55,7 @@ test: false
 # Custom context carrier definitions.
 # ctxweaver comes with built-in support for common carriers:
 #   - context.Context
+#   - *http.Request (net/http)
 #   - echo.Context (github.com/labstack/echo/v4)
 #   - gin.Context (github.com/gin-gonic/gin)
 #   - fiber.Ctx (github.com/gofiber/fiber/v2)

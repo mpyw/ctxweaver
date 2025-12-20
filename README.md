@@ -63,7 +63,7 @@ go run github.com/mpyw/ctxweaver/cmd/ctxweaver@latest ./...
 ```
 
 > [!CAUTION]
-> To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.4.0`).
+> To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.5.0`).
 
 ## Configuration
 
@@ -244,6 +244,7 @@ ctxweaver recognizes the following types as context carriers (checks the **first
 | Type | Accessor | Notes |
 |------|----------|-------|
 | [`context.Context`](https://pkg.go.dev/context#Context) | (none) | Standard library |
+| [`*http.Request`](https://pkg.go.dev/net/http#Request) | `.Context()` | Standard library |
 | [`echo.Context`](https://pkg.go.dev/github.com/labstack/echo/v4#Context) | `.Request().Context()` | Echo framework |
 | [`*cli.Context`](https://pkg.go.dev/github.com/urfave/cli/v2#Context) | `.Context` | urfave/cli |
 | [`*cobra.Command`](https://pkg.go.dev/github.com/spf13/cobra#Command) | `.Context()` | Cobra |
