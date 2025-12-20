@@ -106,7 +106,9 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 
 > [!NOTE]
 > - `template` can be an inline string or an object with `file` key pointing to a template file.
-> - CLI arguments take precedence over config file values for package patterns.
+> - **CLI override behavior:**
+>   - Package patterns (CLI args): **Override** `packages.patterns` when provided
+>   - `-test` flag: **Override** `test` config when explicitly passed
 
 ### Package Filtering
 

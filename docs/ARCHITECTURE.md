@@ -190,6 +190,21 @@ Future work could generalize this.
 - `goimports`/`gci` do this well
 - Reduces complexity and dependencies
 
+### 9. CLI Override Behavior
+
+**Decision**: CLI arguments override (not merge) config file values.
+
+**Behavior**:
+| Source | Config Field | CLI | Behavior |
+|--------|--------------|-----|----------|
+| Package patterns | `packages.patterns` | positional args | **Override**: CLI args replace config entirely |
+| Test mode | `test` | `-test` | **Override**: Only when flag is explicitly passed |
+
+**Rationale**:
+- Simple mental model: CLI takes precedence
+- Explicit flag detection via `flag.Visit()` for boolean overrides
+- No complex merge logic to reason about
+
 ## File Processing Pipeline
 
 ```
