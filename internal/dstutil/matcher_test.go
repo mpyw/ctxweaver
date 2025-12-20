@@ -401,3 +401,79 @@ func TestMatchesExact_SkeletonPassesButExactFails(t *testing.T) {
 		})
 	}
 }
+
+func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
+	// Test the special case: SelectorExpr matches Ident with Path set
+	// This happens when NewDecoratorFromPackage resolves `pkg.Func` to `Func` with Path="pkg"
+
+	t.Run("SelectorExpr matches Ident with Path (selA.Sel.Name == identB.Name)", func(t *testing.T) {
+		// Create SelectorExpr: pkg.Func
+		selExpr := &dst.SelectorExpr{
+			X:   &dst.Ident{Name: "pkg"},
+			Sel: &dst.Ident{Name: "Func"},
+		}
+
+		// Create Ident with Path: Func (with Path="pkg")
+		identWithPath := &dst.Ident{
+			Name: "Func",
+			Path: "github.com/example/pkg",
+		}
+
+		// They should match because selA.Sel.Name == identB.Name
+		if !compareNodes(selExpr, identWithPath, "test", false) {
+			t.Error("expected SelectorExpr to match Ident with Path")
+		}
+	})
+
+	t.Run("Ident with Path matches SelectorExpr (identA.Name == selB.Sel.Name)", func(t *testing.T) {
+		// Create Ident with Path: Func (with Path="pkg")
+		identWithPath := &dst.Ident{
+			Name: "Func",
+			Path: "github.com/example/pkg",
+		}
+
+		// Create SelectorExpr: pkg.Func
+		selExpr := &dst.SelectorExpr{
+			X:   &dst.Ident{Name: "pkg"},
+			Sel: &dst.Ident{Name: "Func"},
+		}
+
+		// They should match because identA.Name == selB.Sel.Name
+		if !compareNodes(identWithPath, selExpr, "test", false) {
+			t.Error("expected Ident with Path to match SelectorExpr")
+		}
+	})
+
+	t.Run("SelectorExpr does not match Ident without Path", func(t *testing.T) {
+		selExpr := &dst.SelectorExpr{
+			X:   &dst.Ident{Name: "pkg"},
+			Sel: &dst.Ident{Name: "Func"},
+		}
+
+		// Ident without Path should not match
+		identWithoutPath := &dst.Ident{
+			Name: "Func",
+			Path: "", // No Path set
+		}
+
+		if compareNodes(selExpr, identWithoutPath, "test", false) {
+			t.Error("expected SelectorExpr to NOT match Ident without Path")
+		}
+	})
+
+	t.Run("different names do not match", func(t *testing.T) {
+		selExpr := &dst.SelectorExpr{
+			X:   &dst.Ident{Name: "pkg"},
+			Sel: &dst.Ident{Name: "Foo"},
+		}
+
+		identWithPath := &dst.Ident{
+			Name: "Bar", // Different name
+			Path: "github.com/example/pkg",
+		}
+
+		if compareNodes(selExpr, identWithPath, "test", false) {
+			t.Error("expected different names to NOT match")
+		}
+	})
+}

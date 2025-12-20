@@ -750,3 +750,102 @@ test: true
 		}
 	})
 }
+
+func TestRun_PackageWithSyntaxError(t *testing.T) {
+	// Helper to reset flags and set args
+	setup := func(args ...string) {
+		flag.CommandLine = flag.NewFlagSet("ctxweaver", flag.ContinueOnError)
+		flag.CommandLine.SetOutput(&bytes.Buffer{})
+		os.Args = append([]string{"ctxweaver"}, args...)
+	}
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+	config := `template: "defer trace({{.Ctx}})"
+imports: []
+`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	goMod := filepath.Join(tmpDir, "go.mod")
+	if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatalf("failed to write go.mod: %v", err)
+	}
+
+	// Create Go file with syntax error
+	goFile := filepath.Join(tmpDir, "broken.go")
+	goCode := `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	// missing closing brace
+`
+	if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+		t.Fatalf("failed to write go file: %v", err)
+	}
+
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	setup("-config", configPath, "-silent", "./...")
+	err := run()
+	if err == nil {
+		t.Fatal("expected error for package with syntax error")
+	}
+	if !strings.Contains(err.Error(), "error") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestRun_PackageWithTypeError(t *testing.T) {
+	// Helper to reset flags and set args
+	setup := func(args ...string) {
+		flag.CommandLine = flag.NewFlagSet("ctxweaver", flag.ContinueOnError)
+		flag.CommandLine.SetOutput(&bytes.Buffer{})
+		os.Args = append([]string{"ctxweaver"}, args...)
+	}
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+	config := `template: "defer trace({{.Ctx}})"
+imports: []
+`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	goMod := filepath.Join(tmpDir, "go.mod")
+	if err := os.WriteFile(goMod, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatalf("failed to write go.mod: %v", err)
+	}
+
+	// Create Go file with type error (undefined variable)
+	goFile := filepath.Join(tmpDir, "typeerror.go")
+	goCode := `package test
+
+import "context"
+
+func Foo(ctx context.Context) {
+	_ = undefinedVariable
+}
+`
+	if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
+		t.Fatalf("failed to write go file: %v", err)
+	}
+
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	setup("-config", configPath, "-silent", "./...")
+	err := run()
+	if err == nil {
+		t.Fatal("expected error for package with type error")
+	}
+	if !strings.Contains(err.Error(), "error") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
