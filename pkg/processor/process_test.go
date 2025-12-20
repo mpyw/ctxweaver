@@ -407,7 +407,7 @@ func Foo(ctx context.Context) {
 		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"[invalid"}))
 
 		// Restore stderr and read captured output
-		w.Close()
+		_ = w.Close()
 		os.Stderr = oldStderr
 		var buf bytes.Buffer
 		_, _ = buf.ReadFrom(r)
