@@ -4,7 +4,6 @@ package config
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -115,22 +114,14 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Convert to JSON-compatible format (YAML maps use map[string]any)
-	jsonCompatible := convertYAMLToJSON(raw)
-
 	// Validate against JSON Schema
-	if err := validateSchema(jsonCompatible); err != nil {
+	if err := validateSchema(raw); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	// Now unmarshal into struct
-	jsonBytes, err := json.Marshal(jsonCompatible)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert config: %w", err)
-	}
-
+	// Unmarshal directly into struct
 	var cfg Config
-	if err := json.Unmarshal(jsonBytes, &cfg); err != nil {
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
@@ -168,27 +159,6 @@ func validateSchema(data any) error {
 	}
 
 	return nil
-}
-
-// convertYAMLToJSON converts YAML-style maps to JSON-compatible maps.
-// YAML unmarshals to map[string]any but we need to ensure nested maps are also converted.
-func convertYAMLToJSON(v any) any {
-	switch v := v.(type) {
-	case map[string]any:
-		m := make(map[string]any)
-		for k, val := range v {
-			m[k] = convertYAMLToJSON(val)
-		}
-		return m
-	case []any:
-		arr := make([]any, len(v))
-		for i, val := range v {
-			arr[i] = convertYAMLToJSON(val)
-		}
-		return arr
-	default:
-		return v
-	}
 }
 
 // BuildContextExpr builds the expression to access context.Context from a variable.
