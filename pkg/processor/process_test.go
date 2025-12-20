@@ -243,3 +243,146 @@ func Fixture(ctx context.Context) {
 		t.Errorf("FilesProcessed = %d, want 1 (testdata should be skipped)", result.FilesProcessed)
 	}
 }
+
+// TestProcess_ExcludeRegexps tests package exclusion by regex patterns.
+func TestProcess_ExcludeRegexps(t *testing.T) {
+	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
+	registry := config.NewCarrierRegistry()
+
+	t.Run("exclude packages matching regex", func(t *testing.T) {
+		tmpDir := setupTestModule(t, map[string]string{
+			"main.go": `package main
+
+import "context"
+
+func Foo(ctx context.Context) {
+}
+`,
+			"internal/repo/repo.go": `package repo
+
+import "context"
+
+func Get(ctx context.Context) {
+}
+`,
+			"handler/handler.go": `package handler
+
+import "context"
+
+func Handle(ctx context.Context) {
+}
+`,
+		})
+
+		// Exclude packages containing "internal"
+		proc := processor.New(registry, tmpl, nil, processor.WithExclude([]string{"/internal/"}))
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		result, err := proc.Process([]string{"./..."})
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		// Should process main.go and handler/handler.go, but not internal/repo/repo.go
+		if result.FilesProcessed != 2 {
+			t.Errorf("FilesProcessed = %d, want 2", result.FilesProcessed)
+		}
+		if result.FilesModified != 2 {
+			t.Errorf("FilesModified = %d, want 2", result.FilesModified)
+		}
+
+		// Verify internal/repo/repo.go was NOT modified
+		content, _ := os.ReadFile(filepath.Join(tmpDir, "internal/repo/repo.go"))
+		if strings.Contains(string(content), "defer trace(ctx)") {
+			t.Errorf("internal/repo/repo.go should not be modified (excluded)")
+		}
+
+		// Verify handler/handler.go WAS modified
+		content, _ = os.ReadFile(filepath.Join(tmpDir, "handler/handler.go"))
+		if !strings.Contains(string(content), "defer trace(ctx)") {
+			t.Errorf("handler/handler.go should be modified")
+		}
+	})
+
+	t.Run("multiple exclude patterns", func(t *testing.T) {
+		tmpDir := setupTestModule(t, map[string]string{
+			"main.go": `package main
+
+import "context"
+
+func Foo(ctx context.Context) {
+}
+`,
+			"mock/mock.go": `package mock
+
+import "context"
+
+func Mock(ctx context.Context) {
+}
+`,
+			"internal/repo/repo.go": `package repo
+
+import "context"
+
+func Get(ctx context.Context) {
+}
+`,
+		})
+
+		// Exclude packages containing "internal" or "mock"
+		proc := processor.New(registry, tmpl, nil, processor.WithExclude([]string{"/internal/", "/mock$"}))
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		result, err := proc.Process([]string{"./..."})
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		// Should only process main.go
+		if result.FilesProcessed != 1 {
+			t.Errorf("FilesProcessed = %d, want 1", result.FilesProcessed)
+		}
+	})
+
+	t.Run("no exclusions when patterns empty", func(t *testing.T) {
+		tmpDir := setupTestModule(t, map[string]string{
+			"main.go": `package main
+
+import "context"
+
+func Foo(ctx context.Context) {
+}
+`,
+			"internal/repo/repo.go": `package repo
+
+import "context"
+
+func Get(ctx context.Context) {
+}
+`,
+		})
+
+		// Empty exclude patterns
+		proc := processor.New(registry, tmpl, nil, processor.WithExclude([]string{}))
+
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		result, err := proc.Process([]string{"./..."})
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+
+		// Should process all files
+		if result.FilesProcessed != 2 {
+			t.Errorf("FilesProcessed = %d, want 2", result.FilesProcessed)
+		}
+	})
+}

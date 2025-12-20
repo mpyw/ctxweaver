@@ -32,13 +32,14 @@ func main() {
 
 func run() error {
 	var (
-		configFile string
-		dryRun     bool
-		verbose    bool
-		silent     bool
-		test       bool
-		remove     bool
-		noHooks    bool
+		configFile     string
+		dryRun         bool
+		verbose        bool
+		silent         bool
+		test           bool
+		remove         bool
+		noHooks        bool
+		excludeRegexps string
 	)
 
 	flag.StringVar(&configFile, "config", "ctxweaver.yaml", "path to configuration file")
@@ -48,6 +49,7 @@ func run() error {
 	flag.BoolVar(&test, "test", false, "process test files")
 	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
 	flag.BoolVar(&noHooks, "no-hooks", false, "skip pre/post hooks")
+	flag.StringVar(&excludeRegexps, "exclude-regexps", "", "comma-separated regex patterns to exclude packages by import path")
 	flag.Parse()
 
 	// Load configuration
@@ -59,6 +61,9 @@ func run() error {
 	// Override config with explicitly passed flags
 	if isFlagPassed("test") {
 		cfg.Test = test
+	}
+	if isFlagPassed("exclude-regexps") && excludeRegexps != "" {
+		cfg.ExcludeRegexps = append(cfg.ExcludeRegexps, strings.Split(excludeRegexps, ",")...)
 	}
 
 	// Get patterns from args or config
@@ -105,6 +110,7 @@ func run() error {
 		processor.WithDryRun(dryRun),
 		processor.WithVerbose(verbose && !silent),
 		processor.WithRemove(remove),
+		processor.WithExclude(cfg.ExcludeRegexps),
 	)
 
 	// Print ctxweaver execution header

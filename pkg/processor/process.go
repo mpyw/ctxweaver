@@ -44,6 +44,14 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 			continue
 		}
 
+		// Check if package should be excluded by regex patterns
+		if p.shouldExcludePackage(pkg.PkgPath) {
+			if p.verbose {
+				fmt.Printf("excluded: %s\n", pkg.PkgPath)
+			}
+			continue
+		}
+
 		// Create decorator once per package for efficient type-resolved DST conversion
 		dec := decorator.NewDecoratorFromPackage(pkg)
 
@@ -77,6 +85,16 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 	}
 
 	return result, nil
+}
+
+// shouldExcludePackage checks if the package path matches any exclude regex pattern.
+func (p *Processor) shouldExcludePackage(pkgPath string) bool {
+	for _, re := range p.exclude {
+		if re.MatchString(pkgPath) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildRestorerResolver creates a resolver from packages.Package.Imports.
