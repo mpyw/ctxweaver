@@ -494,11 +494,11 @@ functions:
 
 func TestTemplate_UnmarshalYAML(t *testing.T) {
 	tests := []struct {
-		name         string
-		yaml         string
-		wantInline   string
-		wantFile     string
-		wantErr      bool
+		name       string
+		yaml       string
+		wantInline string
+		wantFile   string
+		wantErr    bool
 	}{
 		{
 			name:       "inline string",
@@ -548,4 +548,142 @@ packages:
 			}
 		})
 	}
+}
+
+func TestLoadConfig_DefaultValues(t *testing.T) {
+	t.Run("sets default function types when empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+		// Config without functions section
+		configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+			t.Fatalf("failed to write config file: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		// Should have default types: function and method
+		if len(cfg.Functions.Types) != 2 {
+			t.Errorf("Functions.Types = %v, want 2 elements", cfg.Functions.Types)
+		}
+		hasFunction := false
+		hasMethod := false
+		for _, ft := range cfg.Functions.Types {
+			if ft == FuncTypeFunction {
+				hasFunction = true
+			}
+			if ft == FuncTypeMethod {
+				hasMethod = true
+			}
+		}
+		if !hasFunction || !hasMethod {
+			t.Errorf("Functions.Types should contain both 'function' and 'method', got %v", cfg.Functions.Types)
+		}
+	})
+
+	t.Run("sets default function scopes when empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+		// Config without functions section
+		configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+			t.Fatalf("failed to write config file: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		// Should have default scopes: exported and unexported
+		if len(cfg.Functions.Scopes) != 2 {
+			t.Errorf("Functions.Scopes = %v, want 2 elements", cfg.Functions.Scopes)
+		}
+		hasExported := false
+		hasUnexported := false
+		for _, fs := range cfg.Functions.Scopes {
+			if fs == FuncScopeExported {
+				hasExported = true
+			}
+			if fs == FuncScopeUnexported {
+				hasUnexported = true
+			}
+		}
+		if !hasExported || !hasUnexported {
+			t.Errorf("Functions.Scopes should contain both 'exported' and 'unexported', got %v", cfg.Functions.Scopes)
+		}
+	})
+
+	t.Run("preserves explicit types when specified", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+		configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+functions:
+  types:
+    - function
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+			t.Fatalf("failed to write config file: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		// Should only have function type
+		if len(cfg.Functions.Types) != 1 {
+			t.Errorf("Functions.Types = %v, want 1 element", cfg.Functions.Types)
+		}
+		if cfg.Functions.Types[0] != FuncTypeFunction {
+			t.Errorf("Functions.Types[0] = %v, want 'function'", cfg.Functions.Types[0])
+		}
+	})
+
+	t.Run("preserves explicit scopes when specified", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+		configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+functions:
+  scopes:
+    - exported
+`
+		if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+			t.Fatalf("failed to write config file: %v", err)
+		}
+
+		cfg, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+
+		// Should only have exported scope
+		if len(cfg.Functions.Scopes) != 1 {
+			t.Errorf("Functions.Scopes = %v, want 1 element", cfg.Functions.Scopes)
+		}
+		if cfg.Functions.Scopes[0] != FuncScopeExported {
+			t.Errorf("Functions.Scopes[0] = %v, want 'exported'", cfg.Functions.Scopes[0])
+		}
+	})
 }

@@ -231,7 +231,22 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	// Set defaults
+	cfg.SetDefaults()
+
 	return &cfg, nil
+}
+
+// SetDefaults sets default values for optional fields.
+func (c *Config) SetDefaults() {
+	// Set default function types (both function and method)
+	if len(c.Functions.Types) == 0 {
+		c.Functions.Types = []FuncType{FuncTypeFunction, FuncTypeMethod}
+	}
+	// Set default function scopes (both exported and unexported)
+	if len(c.Functions.Scopes) == 0 {
+		c.Functions.Scopes = []FuncScope{FuncScopeExported, FuncScopeUnexported}
+	}
 }
 
 // validateSchema validates data against the embedded JSON Schema.
