@@ -85,6 +85,23 @@ test: false
 
 See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example with all options.
 
+### Configuration Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `template` | `string` | Go template for the statement to insert |
+| `template_file` | `string` | Path to template file (alternative to inline `template`) |
+| `imports` | `[]string` | Import paths to add when statement is inserted |
+| `patterns` | `[]string` | Package patterns to process (overridden by CLI args) |
+| `test` | `bool` | Whether to process test files (overridden by `-test` flag) |
+| `carriers` | `[]object` | Custom context carrier definitions |
+| `hooks.pre` | `[]string` | Shell commands to run before processing |
+| `hooks.post` | `[]string` | Shell commands to run after processing |
+
+> [!NOTE]
+> - If both `template` and `template_file` are specified, `template` takes precedence.
+> - CLI arguments and flags take precedence over config file values.
+
 ## Flags
 
 | Flag | Default | Description |
@@ -92,7 +109,10 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 | `-config` | `ctxweaver.yaml` | Path to configuration file |
 | `-dry-run` | `false` | Print changes without writing files |
 | `-verbose` | `false` | Print processed files |
+| `-silent` | `false` | Suppress all output except errors |
 | `-test` | `false` | Process test files (`*_test.go`) |
+| `-remove` | `false` | Remove generated statements instead of adding them |
+| `-no-hooks` | `false` | Skip pre/post hooks defined in config |
 
 ### Examples
 
@@ -108,6 +128,12 @@ ctxweaver -dry-run -verbose ./...
 
 # Include test files
 ctxweaver -test ./...
+
+# Remove previously inserted statements
+ctxweaver -remove ./...
+
+# Skip hooks (useful in CI)
+ctxweaver -no-hooks ./...
 ```
 
 ## Template System
@@ -172,19 +198,27 @@ imports:
 
 ### Custom Function Name Format
 
-If you need a different naming format, you can build it yourself using template variables:
+If you need a different naming format, you can build it yourself using template variables. The following example replicates the default `{{.FuncName}}` behavior:
 
 ```yaml
 template: |
+  {{- $receiver := .ReceiverType -}}
+  {{- if .IsGenericReceiver -}}
+    {{- $receiver = printf "%s[...]" .ReceiverType -}}
+  {{- end -}}
   {{- $name := "" -}}
   {{- if .IsMethod -}}
     {{- if .IsPointerReceiver -}}
-      {{- $name = printf "%s.(*%s).%s" .PackageName .ReceiverType .FuncBaseName -}}
+      {{- $name = printf "%s.(*%s).%s" .PackageName $receiver .FuncBaseName -}}
     {{- else -}}
-      {{- $name = printf "%s.%s.%s" .PackageName .ReceiverType .FuncBaseName -}}
+      {{- $name = printf "%s.%s.%s" .PackageName $receiver .FuncBaseName -}}
     {{- end -}}
   {{- else -}}
-    {{- $name = printf "%s.%s" .PackageName .FuncBaseName -}}
+    {{- if .IsGenericFunc -}}
+      {{- $name = printf "%s.%s[...]" .PackageName .FuncBaseName -}}
+    {{- else -}}
+      {{- $name = printf "%s.%s" .PackageName .FuncBaseName -}}
+    {{- end -}}
   {{- end -}}
   defer newrelic.FromContext({{.Ctx}}).StartSegment({{$name | quote}}).End()
 imports:
@@ -194,12 +228,12 @@ imports:
 This gives you full control over the naming format. Available variables for building custom names:
 - `{{.PackageName}}` - Package name (e.g., `service`)
 - `{{.PackagePath}}` - Full import path (e.g., `github.com/example/myapp/pkg/service`)
-- `{{.ReceiverType}}` - Receiver type (e.g., `UserService`, `Container` for generics)
+- `{{.ReceiverType}}` - Receiver type name without generics (e.g., `UserService`, `Container`)
 - `{{.FuncBaseName}}` - Function/method name (e.g., `GetByID`)
 - `{{.IsMethod}}` - `true` if method, `false` if function
 - `{{.IsPointerReceiver}}` - `true` if pointer receiver
-- `{{.IsGenericFunc}}` - `true` if generic function
-- `{{.IsGenericReceiver}}` - `true` if generic receiver type
+- `{{.IsGenericFunc}}` - `true` if generic function (e.g., `func Foo[T any]()`)
+- `{{.IsGenericReceiver}}` - `true` if generic receiver type (e.g., `func (c *Container[T]) Method()`)
 
 ## Built-in Context Carriers
 
@@ -272,6 +306,54 @@ ctxweaver automatically adds imports specified in the config file when statement
 
 > [!NOTE]
 > ctxweaver does not reorder or reformat existing imports. Use `goimports` or `gci` after ctxweaver if you need consistent import formatting.
+
+## Hooks
+
+ctxweaver supports pre and post hooks to run shell commands before and after processing.
+
+```yaml
+hooks:
+  pre:
+    - go mod tidy
+  post:
+    - gci write .
+    - gofmt -w .
+```
+
+### Pre Hooks
+
+Commands run sequentially before processing. If any command fails (non-zero exit), processing is aborted and no files are modified. Useful for:
+
+- Running `go mod tidy` to ensure dependencies are up to date
+- Validating preconditions
+
+### Post Hooks
+
+Commands run sequentially after processing. If any command fails, an error is reported but files have already been modified. Useful for:
+
+- Formatting code with `gofmt`
+- Organizing imports with `gci` or `goimports`
+- Running linters with auto-fix
+
+> [!TIP]
+> ctxweaver adds imports but does not organize them. Since `goimports` only adds/removes imports without reordering, use tools like [`gci`](https://github.com/daixiang0/gci) or `golangci-lint run --fix` (with gci enabled) to enforce consistent import ordering.
+>
+> **Recommended post hooks:**
+> ```yaml
+> hooks:
+>   post:
+>     - gci write .
+>     - gofmt -w .
+> ```
+>
+> Or with golangci-lint:
+> ```yaml
+> hooks:
+>   post:
+>     - golangci-lint run --fix ./...
+> ```
+
+Use the `-no-hooks` flag to skip hooks (useful for CI or when running ctxweaver as part of a larger pipeline).
 
 ## Development
 
