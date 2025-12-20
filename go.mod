@@ -15,3 +15,6 @@ require (
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 )
+
+// Retract unstable versions
+retract v0.1.0 // Unstable: significant API and behavior changes expected
