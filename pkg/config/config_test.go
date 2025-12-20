@@ -21,6 +21,11 @@ func TestNewCarrierRegistry(t *testing.T) {
 			typ:      "Context",
 			accessor: "",
 		},
+		"http.Request": {
+			pkg:      "net/http",
+			typ:      "Request",
+			accessor: ".Context()",
+		},
 		"echo.Context": {
 			pkg:      "github.com/labstack/echo/v4",
 			typ:      "Context",
