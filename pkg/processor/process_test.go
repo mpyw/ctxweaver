@@ -276,7 +276,7 @@ func Handle(ctx context.Context) {
 		})
 
 		// Exclude packages containing "internal"
-		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"/internal/"}))
+		proc := processor.New(registry, tmpl, nil, processor.WithPackageRegexps(config.Regexps{Omit: []string{"/internal/"}}))
 
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
@@ -334,7 +334,7 @@ func Get(ctx context.Context) {
 		})
 
 		// Exclude packages containing "internal" or "mock"
-		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"/internal/", "/mock$"}))
+		proc := processor.New(registry, tmpl, nil, processor.WithPackageRegexps(config.Regexps{Omit: []string{"/internal/", "/mock$"}}))
 
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
@@ -370,7 +370,7 @@ func Get(ctx context.Context) {
 		})
 
 		// Empty exclude patterns
-		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{}))
+		proc := processor.New(registry, tmpl, nil, processor.WithPackageRegexps(config.Regexps{}))
 
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
@@ -404,7 +404,7 @@ func Foo(ctx context.Context) {
 		os.Stderr = w
 
 		// Invalid regex pattern: unclosed bracket
-		proc := processor.New(registry, tmpl, nil, processor.WithExcludeRegexps([]string{"[invalid"}))
+		proc := processor.New(registry, tmpl, nil, processor.WithPackageRegexps(config.Regexps{Omit: []string{"[invalid"}}))
 
 		// Restore stderr and read captured output
 		_ = w.Close()

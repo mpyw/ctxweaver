@@ -87,14 +87,9 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 	return result, nil
 }
 
-// shouldExcludePackage checks if the package path matches any exclude regex pattern.
+// shouldExcludePackage checks if the package path should be excluded based on regex filters.
 func (p *Processor) shouldExcludePackage(pkgPath string) bool {
-	for _, re := range p.exclude {
-		if re.MatchString(pkgPath) {
-			return true
-		}
-	}
-	return false
+	return !p.pkgRegexps.Match(pkgPath)
 }
 
 // buildRestorerResolver creates a resolver from packages.Package.Imports.

@@ -116,8 +116,9 @@ carriers:
     type: Context
     accessor: .GetContext()
 
-patterns:
-  - ./...
+packages:
+  patterns:
+    - ./...
 
 test: true
 `
@@ -132,8 +133,12 @@ test: true
 
 	// Check template
 	expectedTemplate := "defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()\n"
-	if cfg.Template != expectedTemplate {
-		t.Errorf("Template = %q, want %q", cfg.Template, expectedTemplate)
+	tmplContent, err := cfg.Template.Content()
+	if err != nil {
+		t.Fatalf("Template.Content() error = %v", err)
+	}
+	if tmplContent != expectedTemplate {
+		t.Errorf("Template = %q, want %q", tmplContent, expectedTemplate)
 	}
 
 	// Check imports
@@ -152,8 +157,8 @@ test: true
 	}
 
 	// Check patterns
-	if len(cfg.Patterns) != 1 || cfg.Patterns[0] != "./..." {
-		t.Errorf("Patterns = %v, want [./...]", cfg.Patterns)
+	if len(cfg.Packages.Patterns) != 1 || cfg.Packages.Patterns[0] != "./..." {
+		t.Errorf("Packages.Patterns = %v, want [./...]", cfg.Packages.Patterns)
 	}
 
 	// Check test flag
@@ -174,7 +179,12 @@ func TestLoadConfig_WithTemplateFile(t *testing.T) {
 
 	// Create config file
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
-	configContent := "template_file: " + templatePath + "\n"
+	configContent := `template:
+  file: ` + templatePath + `
+packages:
+  patterns:
+    - ./...
+`
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
 	}
@@ -184,8 +194,12 @@ func TestLoadConfig_WithTemplateFile(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	if cfg.Template != templateContent {
-		t.Errorf("Template = %q, want %q", cfg.Template, templateContent)
+	tmplContent, err := cfg.Template.Content()
+	if err != nil {
+		t.Fatalf("Template.Content() error = %v", err)
+	}
+	if tmplContent != templateContent {
+		t.Errorf("Template = %q, want %q", tmplContent, templateContent)
 	}
 }
 
@@ -215,6 +229,9 @@ func TestLoadConfig_UnknownField(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
 unknown_field: "should cause error"
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
@@ -235,6 +252,9 @@ func TestLoadConfig_InvalidCarrier_MissingPackage(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
 carriers:
   - type: Context
 `
@@ -256,6 +276,9 @@ func TestLoadConfig_InvalidCarrier_MissingType(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
 carriers:
   - package: github.com/example/pkg
 `
@@ -277,6 +300,9 @@ func TestLoadConfig_InvalidCarrier_UnknownField(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
 carriers:
   - package: github.com/example/pkg
     type: Context
@@ -297,6 +323,9 @@ func TestLoadConfig_InvalidHooks_UnknownField(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
 hooks:
   pre:
     - echo hello
@@ -317,6 +346,9 @@ func TestLoadConfig_WrongType(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: 123
+packages:
+  patterns:
+    - ./...
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("failed to write config file: %v", err)
@@ -359,6 +391,9 @@ func TestLoadConfig_WithHooks(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
 	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
 hooks:
   pre:
     - go mod tidy
@@ -379,5 +414,138 @@ hooks:
 	}
 	if len(cfg.Hooks.Post) != 1 || cfg.Hooks.Post[0] != "gofmt -w ." {
 		t.Errorf("Hooks.Post = %v, want [gofmt -w .]", cfg.Hooks.Post)
+	}
+}
+
+func TestLoadConfig_WithPackageRegexps(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+  regexps:
+    only:
+      - "^github\\.com/myorg"
+    omit:
+      - "_test$"
+      - "/internal/"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if len(cfg.Packages.Regexps.Only) != 1 {
+		t.Errorf("Packages.Regexps.Only = %v, want 1 element", cfg.Packages.Regexps.Only)
+	}
+	if len(cfg.Packages.Regexps.Omit) != 2 {
+		t.Errorf("Packages.Regexps.Omit = %v, want 2 elements", cfg.Packages.Regexps.Omit)
+	}
+}
+
+func TestLoadConfig_WithFunctions(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+	configContent := `template: "defer trace({{.Ctx}})"
+packages:
+  patterns:
+    - ./...
+functions:
+  types:
+    - function
+    - method
+  scopes:
+    - exported
+  regexps:
+    only:
+      - "^Handle"
+    omit:
+      - "Mock$"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if len(cfg.Functions.Types) != 2 {
+		t.Errorf("Functions.Types = %v, want 2 elements", cfg.Functions.Types)
+	}
+	if len(cfg.Functions.Scopes) != 1 || cfg.Functions.Scopes[0] != FuncScopeExported {
+		t.Errorf("Functions.Scopes = %v, want [exported]", cfg.Functions.Scopes)
+	}
+	if len(cfg.Functions.Regexps.Only) != 1 {
+		t.Errorf("Functions.Regexps.Only = %v, want 1 element", cfg.Functions.Regexps.Only)
+	}
+	if len(cfg.Functions.Regexps.Omit) != 1 {
+		t.Errorf("Functions.Regexps.Omit = %v, want 1 element", cfg.Functions.Regexps.Omit)
+	}
+}
+
+func TestTemplate_UnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name         string
+		yaml         string
+		wantInline   string
+		wantFile     string
+		wantErr      bool
+	}{
+		{
+			name:       "inline string",
+			yaml:       `template: "defer trace({{.Ctx}})"`,
+			wantInline: "defer trace({{.Ctx}})",
+		},
+		{
+			name:     "file reference",
+			yaml:     `template: {file: "./template.txt"}`,
+			wantFile: "./template.txt",
+		},
+		{
+			name: "multiline inline",
+			yaml: `template: |
+  defer trace({{.Ctx}})`,
+			wantInline: "defer trace({{.Ctx}})\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
+
+			configContent := tt.yaml + `
+packages:
+  patterns:
+    - ./...
+`
+			if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
+				t.Fatalf("failed to write config file: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("LoadConfig() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if cfg.Template.Inline != tt.wantInline {
+				t.Errorf("Template.Inline = %q, want %q", cfg.Template.Inline, tt.wantInline)
+			}
+			if cfg.Template.File != tt.wantFile {
+				t.Errorf("Template.File = %q, want %q", cfg.Template.File, tt.wantFile)
+			}
+		})
 	}
 }

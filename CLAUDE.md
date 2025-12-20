@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Template-based insertion**: Fully customizable via Go templates
 - **Context carrier detection**: Recognizes `context.Context` and framework-specific types (Echo, Gin, Fiber, etc.)
-- **Package exclusion**: Exclude packages by regex patterns matched against import paths
+- **Package filtering**: Filter packages by patterns and regex (only/omit)
+- **Function filtering**: Filter functions by type, scope, and regex patterns
 - **Statement detection**: Detects existing statements and updates them when function names change
 - **Comment preservation**: Uses DST (Decorated Syntax Tree) to preserve comments and formatting
 
@@ -67,16 +68,17 @@ ctxweaver/
 1. Load config (YAML)
 2. Parse template
 3. Create carrier registry (defaults + custom)
-4. Compile exclude regex patterns
+4. Compile regex patterns (packages.regexps, functions.regexps)
 5. packages.Load(patterns)
 6. For each package:
-   a. Check exclude_regexps against package import path
+   a. Check packages.regexps (only/omit) against package import path
    b. For each file:
       - Check file-level skip directive
       - Parse with fresh fset
       - Convert AST → DST
       - For each function:
         - Check function-level skip
+        - Check function filter (types, scopes, regexps)
         - Check first parameter for carrier match
         - Render template with variables
         - Detect existing statement

@@ -6,12 +6,25 @@
   "type": "object",
   "properties": {
     "template": {
-      "type": "string",
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Inline Go template for the statement to insert"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path to a file containing the template"
+            }
+          },
+          "required": ["file"],
+          "additionalProperties": false
+        }
+      ],
       "description": "Go template for the statement to insert. Supports variables like {{.Ctx}}, {{.FuncName}}, etc."
-    },
-    "template_file": {
-      "type": "string",
-      "description": "Path to a file containing the template (alternative to template)"
     },
     "imports": {
       "type": "array",
@@ -20,19 +33,13 @@
       },
       "description": "Import paths to add when the template is inserted"
     },
-    "patterns": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Package patterns to process (e.g., './...', './pkg/...'). Defaults to ['./...'] if not specified."
+    "packages": {
+      "$ref": "#/$defs/packages",
+      "description": "Package filtering options"
     },
-    "exclude_regexps": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Regex patterns to exclude packages by their import path (e.g., '^github\\.com/foo/bar/internal', '/mock$')"
+    "functions": {
+      "$ref": "#/$defs/functions",
+      "description": "Function filtering options"
     },
     "test": {
       "type": "boolean",
@@ -51,12 +58,76 @@
       "description": "Shell commands to run before and after processing"
     }
   },
-  "oneOf": [
-    { "required": ["template"] },
-    { "required": ["template_file"] }
-  ],
+  "required": ["template", "packages"],
   "additionalProperties": false,
   "$defs": {
+    "regexps": {
+      "type": "object",
+      "properties": {
+        "only": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Include only items matching these regex patterns"
+        },
+        "omit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Exclude items matching these regex patterns"
+        }
+      },
+      "additionalProperties": false
+    },
+    "packages": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Package patterns to process (e.g., './...', './pkg/...')"
+        },
+        "regexps": {
+          "$ref": "#/$defs/regexps",
+          "description": "Regex patterns to filter packages by import path"
+        }
+      },
+      "required": ["patterns"],
+      "additionalProperties": false
+    },
+    "functions": {
+      "type": "object",
+      "properties": {
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["function", "method"]
+          },
+          "minItems": 1,
+          "description": "Function types to process (function, method). Default: both."
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["exported", "unexported"]
+          },
+          "minItems": 1,
+          "description": "Function scopes to process (exported, unexported). Default: both."
+        },
+        "regexps": {
+          "$ref": "#/$defs/regexps",
+          "description": "Regex patterns to filter functions by name"
+        }
+      },
+      "additionalProperties": false
+    },
     "carrier": {
       "type": "object",
       "properties": {

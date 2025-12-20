@@ -57,20 +57,112 @@ type Hooks struct {
 	Post []string `yaml:"post" json:"post,omitempty"`
 }
 
+// Template can be an inline string or a reference to a file.
+type Template struct {
+	Inline string
+	File   string
+}
+
+// UnmarshalYAML implements custom unmarshaling for Template.
+// Accepts either a string (inline template) or an object with "file" field.
+func (t *Template) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		// Simple string value
+		t.Inline = value.Value
+		return nil
+	case yaml.MappingNode:
+		// Object with "file" field
+		var obj struct {
+			File string `yaml:"file"`
+		}
+		if err := value.Decode(&obj); err != nil {
+			return err
+		}
+		t.File = obj.File
+		return nil
+	default:
+		return fmt.Errorf("template must be a string or an object with 'file' field")
+	}
+}
+
+// MarshalYAML implements custom marshaling for Template.
+func (t Template) MarshalYAML() (any, error) {
+	if t.File != "" {
+		return map[string]string{"file": t.File}, nil
+	}
+	return t.Inline, nil
+}
+
+// Content returns the template content, loading from file if necessary.
+func (t *Template) Content() (string, error) {
+	if t.Inline != "" {
+		return t.Inline, nil
+	}
+	if t.File != "" {
+		data, err := os.ReadFile(t.File)
+		if err != nil {
+			return "", fmt.Errorf("failed to read template file: %w", err)
+		}
+		return string(data), nil
+	}
+	return "", fmt.Errorf("template is empty")
+}
+
+// Regexps defines regex patterns for filtering.
+type Regexps struct {
+	// Only includes items matching these patterns (if specified)
+	Only []string `yaml:"only" json:"only,omitempty"`
+	// Omit excludes items matching these patterns
+	Omit []string `yaml:"omit" json:"omit,omitempty"`
+}
+
+// Packages defines package filtering options.
+type Packages struct {
+	// Patterns are the package patterns to process (e.g., "./...")
+	Patterns []string `yaml:"patterns" json:"patterns"`
+	// Regexps for filtering packages by import path
+	Regexps Regexps `yaml:"regexps" json:"regexps,omitempty"`
+}
+
+// FuncType represents function type for filtering.
+type FuncType string
+
+const (
+	FuncTypeFunction FuncType = "function"
+	FuncTypeMethod   FuncType = "method"
+)
+
+// FuncScope represents function scope for filtering.
+type FuncScope string
+
+const (
+	FuncScopeExported   FuncScope = "exported"
+	FuncScopeUnexported FuncScope = "unexported"
+)
+
+// Functions defines function filtering options.
+type Functions struct {
+	// Types filters by function type (function, method). Default: both.
+	Types []FuncType `yaml:"types" json:"types,omitempty"`
+	// Scopes filters by visibility (exported, unexported). Default: both.
+	Scopes []FuncScope `yaml:"scopes" json:"scopes,omitempty"`
+	// Regexps for filtering functions by name
+	Regexps Regexps `yaml:"regexps" json:"regexps,omitempty"`
+}
+
 // Config represents the user configuration file.
 type Config struct {
 	// Template is the Go template for the statement to insert
-	Template string `yaml:"template" json:"template,omitempty"`
-	// TemplateFile is a path to a file containing the template (alternative to Template)
-	TemplateFile string `yaml:"template_file" json:"template_file,omitempty"`
+	Template Template `yaml:"template" json:"template"`
 	// Imports are the imports to add when the template is inserted
 	Imports []string `yaml:"imports" json:"imports,omitempty"`
 	// Carriers are additional context carrier definitions
 	Carriers []CarrierDef `yaml:"carriers" json:"carriers,omitempty"`
-	// Patterns are the package patterns to process (e.g., "./...")
-	Patterns []string `yaml:"patterns" json:"patterns,omitempty"`
-	// ExcludeRegexps are regex patterns to exclude packages by their import path
-	ExcludeRegexps []string `yaml:"exclude_regexps" json:"exclude_regexps,omitempty"`
+	// Packages defines package filtering options
+	Packages Packages `yaml:"packages" json:"packages"`
+	// Functions defines function filtering options
+	Functions Functions `yaml:"functions" json:"functions,omitempty"`
 	// Test indicates whether to process test files
 	Test bool `yaml:"test" json:"test,omitempty"`
 	// Hooks are shell commands to run before and after processing
@@ -137,15 +229,6 @@ func LoadConfig(path string) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	// Load template from file if specified
-	if cfg.TemplateFile != "" && cfg.Template == "" {
-		tmplData, err := os.ReadFile(cfg.TemplateFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read template file: %w", err)
-		}
-		cfg.Template = string(tmplData)
 	}
 
 	return &cfg, nil
