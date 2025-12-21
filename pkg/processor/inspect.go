@@ -6,7 +6,6 @@ import (
 	"github.com/dave/dst"
 
 	"github.com/mpyw/ctxweaver/internal/directive"
-	"github.com/mpyw/ctxweaver/internal/dstutil"
 	"github.com/mpyw/ctxweaver/pkg/carrier"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/template"
@@ -119,28 +118,12 @@ func (p *Processor) processCandidate(c funcCandidate, df *dst.File, pkgPath stri
 		return false, fmt.Errorf("function %s: %w", c.decl.Name.Name, err)
 	}
 
-	act, err := p.detectAction(c.decl.Body, rendered)
+	action, err := p.detectAction(c.decl.Body, rendered)
 	if err != nil {
 		return false, fmt.Errorf("function %s: %w", c.decl.Name.Name, err)
 	}
 
-	return p.applyAction(c.decl.Body, act, rendered), nil
-}
-
-// applyAction applies the detected action to the function body.
-func (p *Processor) applyAction(body *dst.BlockStmt, act action, rendered string) bool {
-	switch act.actionType {
-	case actionInsert:
-		return dstutil.InsertStatements(body, rendered)
-	case actionUpdate:
-		return dstutil.UpdateStatements(body, act.index, act.count, rendered)
-	case actionRemove:
-		return dstutil.RemoveStatements(body, act.index, act.count)
-	case actionSkip:
-		return false
-	default:
-		return false
-	}
+	return action.Apply(c.decl.Body, rendered), nil
 }
 
 // processFunctions processes functions in the DST file.

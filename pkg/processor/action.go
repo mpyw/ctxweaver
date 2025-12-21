@@ -9,33 +9,58 @@ import (
 	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 
-// actionType represents the action to take on a function.
-type actionType int
+// Action represents an operation to apply to a function body.
+// Implementations encapsulate the logic for each action type.
+type Action interface {
+	// Apply executes the action on the function body.
+	// Returns true if the body was modified.
+	Apply(body *dst.BlockStmt, rendered string) bool
+}
 
-const (
-	actionSkip actionType = iota
-	actionInsert
-	actionUpdate
-	actionRemove
-)
+// skipAction represents no modification needed.
+type skipAction struct{}
 
-// action represents the action to take and related info.
-type action struct {
-	actionType actionType
-	index      int // For actionUpdate/actionRemove, the starting index
-	count      int // Number of statements to update/remove
+func (skipAction) Apply(_ *dst.BlockStmt, _ string) bool {
+	return false
+}
+
+// insertAction represents inserting new statements at the beginning.
+type insertAction struct{}
+
+func (insertAction) Apply(body *dst.BlockStmt, rendered string) bool {
+	return dstutil.InsertStatements(body, rendered)
+}
+
+// updateAction represents replacing existing statements.
+type updateAction struct {
+	index int
+	count int
+}
+
+func (a updateAction) Apply(body *dst.BlockStmt, rendered string) bool {
+	return dstutil.UpdateStatements(body, a.index, a.count, rendered)
+}
+
+// removeAction represents removing existing statements.
+type removeAction struct {
+	index int
+	count int
+}
+
+func (a removeAction) Apply(body *dst.BlockStmt, _ string) bool {
+	return dstutil.RemoveStatements(body, a.index, a.count)
 }
 
 // detectAction determines what action to take for a function body.
 // Uses skeleton matching to compare AST structure. Supports multi-statement templates.
-func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (action, error) {
+func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (Action, error) {
 	// Parse the rendered statements for skeleton comparison
 	targetStmts, err := dstutil.ParseStatements(renderedStmt)
 	if err != nil {
-		return action{}, fmt.Errorf("failed to parse rendered statement: %w", err)
+		return nil, fmt.Errorf("failed to parse rendered statement: %w", err)
 	}
 	if len(targetStmts) == 0 {
-		return action{}, fmt.Errorf("rendered statement is empty")
+		return nil, fmt.Errorf("rendered statement is empty")
 	}
 
 	stmtCount := len(targetStmts)
@@ -64,23 +89,23 @@ func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (acti
 		if allMatch {
 			// Check if first statement has skip directive (manually added, should not be touched)
 			if directive.HasStmtSkipDirective(body.List[i]) {
-				return action{actionType: actionSkip, index: i, count: stmtCount}, nil
+				return skipAction{}, nil
 			}
 			if p.remove {
 				// In remove mode, remove all matching statements
-				return action{actionType: actionRemove, index: i, count: stmtCount}, nil
+				return removeAction{index: i, count: stmtCount}, nil
 			}
 			if allExact {
-				return action{actionType: actionSkip, index: i, count: stmtCount}, nil
+				return skipAction{}, nil
 			}
 			// Structure matches but content differs - needs update
-			return action{actionType: actionUpdate, index: i, count: stmtCount}, nil
+			return updateAction{index: i, count: stmtCount}, nil
 		}
 	}
 
 	// No matching statement found
 	if p.remove {
-		return action{actionType: actionSkip}, nil // Nothing to remove
+		return skipAction{}, nil // Nothing to remove
 	}
-	return action{actionType: actionInsert}, nil
+	return insertAction{}, nil
 }
