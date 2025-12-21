@@ -209,6 +209,23 @@ ctxweaver -remove ./...
 ctxweaver -no-hooks ./...
 ```
 
+> [!TIP]
+> **Refreshing statements after template changes:**
+> When you modify your template, ctxweaver detects existing statements via skeleton matching. If the template structure changes significantly, old statements may not be recognized and will remain alongside newly inserted ones.
+>
+> To cleanly refresh all statements after a template change:
+> ```bash
+> # Step 1: Remove with the OLD template still in config
+> ctxweaver -remove ./...
+>
+> # Step 2: Update your template in ctxweaver.yaml
+>
+> # Step 3: Re-run to insert with the NEW template
+> ctxweaver ./...
+> ```
+>
+> A future `--refresh` flag may automate this, but it would require storing the previous template or using marker comments (e.g., `// ctxweaver:generated`) to identify generated statements regardless of template changes.
+
 ## Template System
 
 > [!TIP]
