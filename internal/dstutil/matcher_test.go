@@ -242,18 +242,20 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 }
 
 func TestCompareFieldLists(t *testing.T) {
+	c := NewComparator()
+
 	t.Run("both nil", func(t *testing.T) {
-		if !compareFieldLists(nil, nil, "test", false) {
+		if !compareFieldLists(nil, nil, "test", false, c) {
 			t.Error("expected nil == nil")
 		}
 	})
 
 	t.Run("one nil", func(t *testing.T) {
 		fl := &dst.FieldList{List: []*dst.Field{}}
-		if compareFieldLists(nil, fl, "test", false) {
+		if compareFieldLists(nil, fl, "test", false, c) {
 			t.Error("expected nil != non-nil")
 		}
-		if compareFieldLists(fl, nil, "test", false) {
+		if compareFieldLists(fl, nil, "test", false, c) {
 			t.Error("expected non-nil != nil")
 		}
 	})
@@ -261,7 +263,7 @@ func TestCompareFieldLists(t *testing.T) {
 	t.Run("different lengths", func(t *testing.T) {
 		a := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
 		b := &dst.FieldList{List: []*dst.Field{}}
-		if compareFieldLists(a, b, "test", false) {
+		if compareFieldLists(a, b, "test", false, c) {
 			t.Error("expected different lengths to not match")
 		}
 	})
@@ -269,7 +271,7 @@ func TestCompareFieldLists(t *testing.T) {
 	t.Run("same types", func(t *testing.T) {
 		a := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
 		b := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
-		if !compareFieldLists(a, b, "test", false) {
+		if !compareFieldLists(a, b, "test", false, c) {
 			t.Error("expected same types to match")
 		}
 	})
@@ -405,6 +407,7 @@ func TestMatchesExact_SkeletonPassesButExactFails(t *testing.T) {
 func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 	// Test the special case: SelectorExpr matches Ident with Path set
 	// This happens when NewDecoratorFromPackage resolves `pkg.Func` to `Func` with Path="pkg"
+	c := NewComparator()
 
 	t.Run("SelectorExpr matches Ident with Path (selA.Sel.Name == identB.Name)", func(t *testing.T) {
 		// Create SelectorExpr: pkg.Func
@@ -420,7 +423,7 @@ func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 		}
 
 		// They should match because selA.Sel.Name == identB.Name
-		if !compareNodes(selExpr, identWithPath, "test", false) {
+		if !c.Compare(selExpr, identWithPath, "test", false) {
 			t.Error("expected SelectorExpr to match Ident with Path")
 		}
 	})
@@ -439,7 +442,7 @@ func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 		}
 
 		// They should match because identA.Name == selB.Sel.Name
-		if !compareNodes(identWithPath, selExpr, "test", false) {
+		if !c.Compare(identWithPath, selExpr, "test", false) {
 			t.Error("expected Ident with Path to match SelectorExpr")
 		}
 	})
@@ -456,7 +459,7 @@ func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 			Path: "", // No Path set
 		}
 
-		if compareNodes(selExpr, identWithoutPath, "test", false) {
+		if c.Compare(selExpr, identWithoutPath, "test", false) {
 			t.Error("expected SelectorExpr to NOT match Ident without Path")
 		}
 	})
@@ -472,7 +475,7 @@ func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 			Path: "github.com/example/pkg",
 		}
 
-		if compareNodes(selExpr, identWithPath, "test", false) {
+		if c.Compare(selExpr, identWithPath, "test", false) {
 			t.Error("expected different names to NOT match")
 		}
 	})

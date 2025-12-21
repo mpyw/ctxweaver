@@ -6,10 +6,17 @@ import (
 	"github.com/dave/dst"
 
 	"github.com/mpyw/ctxweaver/internal/directive"
-	"github.com/mpyw/ctxweaver/internal/dstutil"
 	"github.com/mpyw/ctxweaver/pkg/carrier"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
+
+// funcCandidate represents a validated function that has a context carrier.
+// This struct captures the validated state after filtering, eliminating
+// the need to re-validate in subsequent processing steps.
+type funcCandidate struct {
+	decl  *dst.FuncDecl
+	match *carrier.MatchResult
+}
 
 func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	if decl.Type == nil || decl.Type.Params == nil || len(decl.Type.Params.List) == 0 {
@@ -29,11 +36,50 @@ func isExportedFunc(name string) bool {
 	return r >= 'A' && r <= 'Z'
 }
 
-// processFunctions processes functions in the DST file.
-// Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
-func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error) {
-	modified := false
-	var renderErr error
+// shouldSkipDecl checks if a function declaration should be skipped.
+func shouldSkipDecl(decl *dst.FuncDecl) bool {
+	if directive.HasSkipDirective(decl.Decorations()) {
+		return true
+	}
+	if decl.Body == nil {
+		return true
+	}
+	return false
+}
+
+// matchesFuncFilter checks if a function matches the configured filter.
+func (p *Processor) matchesFuncFilter(decl *dst.FuncDecl) bool {
+	if p.funcFilter == nil {
+		return true
+	}
+	isMethod := decl.Recv != nil && len(decl.Recv.List) > 0
+	isExported := isExportedFunc(decl.Name.Name)
+	return p.funcFilter.Match(decl.Name.Name, isMethod, isExported)
+}
+
+// tryMatchCarrier attempts to match the first parameter against registered carriers.
+// Returns nil if no match is found.
+func (p *Processor) tryMatchCarrier(decl *dst.FuncDecl) *funcCandidate {
+	param := extractFirstParam(decl)
+	if param == nil {
+		return nil
+	}
+
+	result := carrier.Match(param, p.registry)
+	if result == nil {
+		return nil
+	}
+
+	return &funcCandidate{
+		decl:  decl,
+		match: result,
+	}
+}
+
+// collectCandidates traverses the DST file and collects all function candidates
+// that have a context carrier and pass the configured filters.
+func (p *Processor) collectCandidates(df *dst.File) []funcCandidate {
+	var candidates []funcCandidate
 
 	dst.Inspect(df, func(n dst.Node) bool {
 		decl, ok := n.(*dst.FuncDecl)
@@ -41,74 +87,55 @@ func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error)
 			return true
 		}
 
-		// Skip if function has skip directive
-		if directive.HasSkipDirective(decl.Decorations()) {
+		if shouldSkipDecl(decl) {
 			return true
 		}
 
-		// Skip if no body
-		if decl.Body == nil {
+		if !p.matchesFuncFilter(decl) {
 			return true
 		}
 
-		// Check function filter
-		isMethod := decl.Recv != nil && len(decl.Recv.List) > 0
-		isExported := isExportedFunc(decl.Name.Name)
-		if p.funcFilter != nil && !p.funcFilter.Match(decl.Name.Name, isMethod, isExported) {
-			return true
-		}
-
-		// Get first parameter
-		param := extractFirstParam(decl)
-		if param == nil {
-			return true
-		}
-
-		// Check if first param is a context carrier
-		carrierDef, varName, ok := carrier.Match(param, p.registry)
-		if !ok {
-			return true
-		}
-
-		// Build template variables
-		vars := template.BuildVars(df, decl, pkgPath, carrierDef, varName)
-
-		// Render statement
-		stmt, err := p.tmpl.Render(vars)
-		if err != nil {
-			renderErr = fmt.Errorf("function %s: %w", decl.Name.Name, err)
-			return false // Stop inspection
-		}
-
-		// Check existing statement and determine action
-		action, err := p.detectAction(decl.Body, stmt)
-		if err != nil {
-			renderErr = fmt.Errorf("function %s: %w", decl.Name.Name, err)
-			return false // Stop inspection
-		}
-
-		switch action.actionType {
-		case actionInsert:
-			if dstutil.InsertStatements(decl.Body, stmt) {
-				modified = true
-			}
-		case actionUpdate:
-			if dstutil.UpdateStatements(decl.Body, action.index, action.count, stmt) {
-				modified = true
-			}
-		case actionRemove:
-			if dstutil.RemoveStatements(decl.Body, action.index, action.count) {
-				modified = true
-			}
-		case actionSkip:
-			// Already up to date (or nothing to remove)
+		if c := p.tryMatchCarrier(decl); c != nil {
+			candidates = append(candidates, *c)
 		}
 
 		return true
 	})
 
-	if renderErr != nil {
-		return false, renderErr
+	return candidates
+}
+
+// processCandidate processes a single function candidate:
+// renders the template, detects the required action, and applies it.
+func (p *Processor) processCandidate(c funcCandidate, df *dst.File, pkgPath string) (bool, error) {
+	vars := template.BuildVars(df, c.decl, pkgPath, c.match.Carrier, c.match.VarName)
+
+	rendered, err := p.tmpl.Render(vars)
+	if err != nil {
+		return false, fmt.Errorf("function %s: %w", c.decl.Name.Name, err)
 	}
+
+	action, err := p.detectAction(c.decl.Body, rendered)
+	if err != nil {
+		return false, fmt.Errorf("function %s: %w", c.decl.Name.Name, err)
+	}
+
+	return action.Apply(c.decl.Body, rendered), nil
+}
+
+// processFunctions processes functions in the DST file.
+// Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
+func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error) {
+	candidates := p.collectCandidates(df)
+
+	var modified bool
+	for _, c := range candidates {
+		m, err := p.processCandidate(c, df, pkgPath)
+		if err != nil {
+			return false, err
+		}
+		modified = modified || m
+	}
+
 	return modified, nil
 }
