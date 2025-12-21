@@ -26,21 +26,21 @@ func TestMatch(t *testing.T) {
 		param       *dst.Field
 		wantCarrier config.CarrierDef
 		wantVarName string
-		wantOK      bool
+		wantMatch   bool
 	}{
 		"empty names": {
 			param: &dst.Field{
 				Names: []*dst.Ident{},
 				Type:  &dst.Ident{Name: "Request", Path: "net/http"},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"underscore name": {
 			param: &dst.Field{
 				Names: []*dst.Ident{{Name: "_"}},
 				Type:  &dst.Ident{Name: "Request", Path: "net/http"},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"ident with path": {
 			param: &dst.Field{
@@ -53,7 +53,7 @@ func TestMatch(t *testing.T) {
 				Accessor: ".Context()",
 			},
 			wantVarName: "r",
-			wantOK:      true,
+			wantMatch:   true,
 		},
 		"pointer to ident with path": {
 			param: &dst.Field{
@@ -68,7 +68,7 @@ func TestMatch(t *testing.T) {
 				Accessor: ".Context()",
 			},
 			wantVarName: "req",
-			wantOK:      true,
+			wantMatch:   true,
 		},
 		"selector expr with path": {
 			param: &dst.Field{
@@ -84,7 +84,7 @@ func TestMatch(t *testing.T) {
 				Accessor: ".Request().Context()",
 			},
 			wantVarName: "c",
-			wantOK:      true,
+			wantMatch:   true,
 		},
 		"pointer to selector expr with path": {
 			param: &dst.Field{
@@ -102,14 +102,14 @@ func TestMatch(t *testing.T) {
 				Accessor: ".Context()",
 			},
 			wantVarName: "ctx",
-			wantOK:      true,
+			wantMatch:   true,
 		},
 		"ident without path": {
 			param: &dst.Field{
 				Names: []*dst.Ident{{Name: "r"}},
 				Type:  &dst.Ident{Name: "Request"},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"selector expr without path": {
 			param: &dst.Field{
@@ -119,28 +119,28 @@ func TestMatch(t *testing.T) {
 					Sel: &dst.Ident{Name: "Request"},
 				},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"carrier not in registry": {
 			param: &dst.Field{
 				Names: []*dst.Ident{{Name: "w"}},
 				Type:  &dst.Ident{Name: "ResponseWriter", Path: "net/http"},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"unsupported type - func type": {
 			param: &dst.Field{
 				Names: []*dst.Ident{{Name: "f"}},
 				Type:  &dst.FuncType{},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"unsupported type - array type": {
 			param: &dst.Field{
 				Names: []*dst.Ident{{Name: "arr"}},
 				Type:  &dst.ArrayType{Elt: &dst.Ident{Name: "int"}},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 		"selector expr with non-ident X": {
 			param: &dst.Field{
@@ -150,35 +150,36 @@ func TestMatch(t *testing.T) {
 					Sel: &dst.Ident{Name: "Request"},
 				},
 			},
-			wantOK: false,
+			wantMatch: false,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			gotCarrier, gotVarName, gotOK := Match(tt.param, registry)
+			result := Match(tt.param, registry)
 
-			if gotOK != tt.wantOK {
-				t.Errorf("Match() ok = %v, want %v", gotOK, tt.wantOK)
+			gotMatch := result != nil
+			if gotMatch != tt.wantMatch {
+				t.Errorf("Match() returned %v, want match=%v", result, tt.wantMatch)
 				return
 			}
 
-			if !tt.wantOK {
+			if !tt.wantMatch {
 				return
 			}
 
-			if gotVarName != tt.wantVarName {
-				t.Errorf("Match() varName = %q, want %q", gotVarName, tt.wantVarName)
+			if result.VarName != tt.wantVarName {
+				t.Errorf("Match() VarName = %q, want %q", result.VarName, tt.wantVarName)
 			}
 
-			if gotCarrier.Package != tt.wantCarrier.Package {
-				t.Errorf("Match() carrier.Package = %q, want %q", gotCarrier.Package, tt.wantCarrier.Package)
+			if result.Carrier.Package != tt.wantCarrier.Package {
+				t.Errorf("Match() Carrier.Package = %q, want %q", result.Carrier.Package, tt.wantCarrier.Package)
 			}
-			if gotCarrier.Type != tt.wantCarrier.Type {
-				t.Errorf("Match() carrier.Type = %q, want %q", gotCarrier.Type, tt.wantCarrier.Type)
+			if result.Carrier.Type != tt.wantCarrier.Type {
+				t.Errorf("Match() Carrier.Type = %q, want %q", result.Carrier.Type, tt.wantCarrier.Type)
 			}
-			if gotCarrier.Accessor != tt.wantCarrier.Accessor {
-				t.Errorf("Match() carrier.Accessor = %q, want %q", gotCarrier.Accessor, tt.wantCarrier.Accessor)
+			if result.Carrier.Accessor != tt.wantCarrier.Accessor {
+				t.Errorf("Match() Carrier.Accessor = %q, want %q", result.Carrier.Accessor, tt.wantCarrier.Accessor)
 			}
 		})
 	}

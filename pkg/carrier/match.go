@@ -7,8 +7,17 @@ import (
 	"github.com/mpyw/ctxweaver/pkg/config"
 )
 
+// MatchResult represents a successful carrier match.
+// It captures the validated state after matching, eliminating
+// the need for callers to handle multiple return values.
+type MatchResult struct {
+	Carrier config.CarrierDef
+	VarName string
+}
+
 // Match extracts carrier info from a function parameter.
-// It returns the carrier definition, variable name, and a boolean indicating success.
+// It returns a MatchResult if the parameter matches a registered carrier,
+// or nil if no match is found.
 //
 // The function supports:
 //   - Direct types with resolved paths (from NewDecoratorFromPackage)
@@ -17,18 +26,9 @@ import (
 //
 // Note: This requires type-resolved DST (via NewDecoratorFromPackage).
 // The dst.Ident.Path field must be set for carrier matching to work.
-//
-// Parameters:
-//   - param: The function parameter field to analyze
-//   - registry: The carrier registry to lookup types
-//
-// Returns:
-//   - config.CarrierDef: The matched carrier definition
-//   - string: The variable name of the parameter
-//   - bool: true if a carrier was matched, false otherwise
-func Match(param *dst.Field, registry *config.CarrierRegistry) (config.CarrierDef, string, bool) {
+func Match(param *dst.Field, registry *config.CarrierRegistry) *MatchResult {
 	if len(param.Names) == 0 || param.Names[0].Name == "_" {
-		return config.CarrierDef{}, "", false
+		return nil
 	}
 
 	varName := param.Names[0].Name
@@ -46,7 +46,7 @@ func Match(param *dst.Field, registry *config.CarrierRegistry) (config.CarrierDe
 		// SelectorExpr: pkg.Type with path set by NewDecoratorFromPackage
 		pkgIdent, ok := t.X.(*dst.Ident)
 		if !ok {
-			return config.CarrierDef{}, "", false
+			return nil
 		}
 		pkgPath = pkgIdent.Path
 		typeName = t.Sel.Name
@@ -57,17 +57,20 @@ func Match(param *dst.Field, registry *config.CarrierRegistry) (config.CarrierDe
 		typeName = t.Name
 
 	default:
-		return config.CarrierDef{}, "", false
+		return nil
 	}
 
 	if pkgPath == "" {
-		return config.CarrierDef{}, "", false
+		return nil
 	}
 
 	carrier, found := registry.Lookup(pkgPath, typeName)
 	if !found {
-		return config.CarrierDef{}, "", false
+		return nil
 	}
 
-	return carrier, varName, true
+	return &MatchResult{
+		Carrier: carrier,
+		VarName: varName,
+	}
 }

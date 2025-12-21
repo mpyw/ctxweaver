@@ -7,7 +7,6 @@ import (
 
 	"github.com/mpyw/ctxweaver/internal/directive"
 	"github.com/mpyw/ctxweaver/pkg/carrier"
-	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
@@ -15,9 +14,8 @@ import (
 // This struct captures the validated state after filtering, eliminating
 // the need to re-validate in subsequent processing steps.
 type funcCandidate struct {
-	decl    *dst.FuncDecl
-	carrier config.CarrierDef
-	varName string
+	decl  *dst.FuncDecl
+	match *carrier.MatchResult
 }
 
 func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
@@ -67,15 +65,14 @@ func (p *Processor) tryMatchCarrier(decl *dst.FuncDecl) *funcCandidate {
 		return nil
 	}
 
-	carrierDef, varName, ok := carrier.Match(param, p.registry)
-	if !ok {
+	result := carrier.Match(param, p.registry)
+	if result == nil {
 		return nil
 	}
 
 	return &funcCandidate{
-		decl:    decl,
-		carrier: carrierDef,
-		varName: varName,
+		decl:  decl,
+		match: result,
 	}
 }
 
@@ -111,7 +108,7 @@ func (p *Processor) collectCandidates(df *dst.File) []funcCandidate {
 // processCandidate processes a single function candidate:
 // renders the template, detects the required action, and applies it.
 func (p *Processor) processCandidate(c funcCandidate, df *dst.File, pkgPath string) (bool, error) {
-	vars := template.BuildVars(df, c.decl, pkgPath, c.carrier, c.varName)
+	vars := template.BuildVars(df, c.decl, pkgPath, c.match.Carrier, c.match.VarName)
 
 	rendered, err := p.tmpl.Render(vars)
 	if err != nil {
