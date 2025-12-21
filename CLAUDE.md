@@ -28,7 +28,9 @@ ctxweaver/
 │       └── main.go
 ├── pkg/
 │   ├── config/                 # YAML configuration
-│   │   └── config.go           # Config parsing, carrier definitions
+│   │   ├── config.go           # Config parsing, carrier definitions
+│   │   ├── carriers.yaml       # Embedded default carrier definitions
+│   │   └── schema.json         # JSON Schema for config validation
 │   ├── processor/              # Core processing logic
 │   │   ├── processor.go        # Main processor struct
 │   │   ├── process.go          # File processing pipeline
@@ -43,7 +45,7 @@ ctxweaver/
 │   ├── directive/              # Directive parsing
 │   │   └── skip.go             # //ctxweaver:skip handling
 │   ├── dstutil/                # DST utilities
-│   │   ├── matcher.go          # Statement pattern matching
+│   │   ├── matcher.go          # Visitor pattern node comparison
 │   │   └── stmt.go             # Statement manipulation
 │   ├── color.go                # TTY-aware color output utilities
 │   └── helpers.go              # Shared utilities
