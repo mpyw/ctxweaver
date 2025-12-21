@@ -258,7 +258,7 @@ func runInsertionTest(t *testing.T, testdataRoot, caseName string) {
 		cfg := loadTestConfig(origDir)
 		caseDir := setupTestdataModule(t, testdataRoot, caseName, setupOpts{})
 
-		registry := config.NewCarrierRegistry()
+		registry := config.NewCarrierRegistry(true)
 
 		tmpl, err := template.Parse(cfg.Template)
 		if err != nil {
@@ -330,7 +330,7 @@ func runRemoveTest(t *testing.T, testdataRoot, caseName string) {
 
 		caseDir := setupTestdataModule(t, testdataRoot, caseName, setupOpts{forRemove: true})
 
-		registry := config.NewCarrierRegistry()
+		registry := config.NewCarrierRegistry(true)
 
 		tmpl, err := template.Parse(cfg.Template)
 		if err != nil {
@@ -387,7 +387,7 @@ func runIdempotencyTest(t *testing.T, testdataRoot, caseName string) {
 		cfg := loadTestConfig(origDir)
 		caseDir := setupTestdataModule(t, testdataRoot, caseName, setupOpts{})
 
-		registry := config.NewCarrierRegistry()
+		registry := config.NewCarrierRegistry(true)
 
 		tmpl, err := template.Parse(cfg.Template)
 		if err != nil {

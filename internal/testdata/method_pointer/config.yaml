@@ -3,3 +3,6 @@ template: |
   defer span.End()
 imports:
   - "go.opentelemetry.io/otel"
+packages:
+  patterns:
+    - ./...

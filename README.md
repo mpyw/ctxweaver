@@ -77,8 +77,9 @@ template: |
 imports:
   - github.com/newrelic/go-agent/v3/newrelic
 
-patterns:
-  - ./...
+packages:
+  patterns:
+    - ./...
 
 test: false
 ```
@@ -89,19 +90,90 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 
 | Option | Type | Required | Default | Description |
 |--------|------|:--------:|---------|-------------|
-| `template` | `string` | ✅ | | Go template for the statement to insert |
-| `template_file` | `string` | ✅ | | Path to template file (alternative to inline `template`) |
+| `template` | `string \| {file: string}` | ✅ | | Go template for the statement to insert (inline or file path) |
 | `imports` | `[]string` | | `[]` | Import paths to add when statement is inserted |
-| `patterns` | `[]string` | | `["./..."]` | Package patterns to process (overridden by CLI args) |
-| `exclude_regexps` | `[]string` | | `[]` | Regex patterns to exclude packages by import path |
+| `packages.patterns` | `[]string` | ✅ | | Package patterns to process (overridden by CLI args) |
+| `packages.regexps.only` | `[]string` | | `[]` | Only process packages matching these regex patterns |
+| `packages.regexps.omit` | `[]string` | | `[]` | Skip packages matching these regex patterns |
+| `functions.types` | `[]FuncType` | | `["function", "method"]` | Enum: `"function"` \| `"method"` |
+| `functions.scopes` | `[]FuncScope` | | `["exported", "unexported"]` | Enum: `"exported"` \| `"unexported"` |
+| `functions.regexps.only` | `[]string` | | `[]` | Only process functions matching these regex patterns |
+| `functions.regexps.omit` | `[]string` | | `[]` | Skip functions matching these regex patterns |
 | `test` | `bool` | | `false` | Whether to process test files (overridden by `-test` flag) |
-| `carriers` | `[]object` | | `[]` | Custom context carrier definitions |
+| `carriers` | `[]Carrier \| CarriersConfig` | | `[]` | Context carrier configuration (see [Custom Carriers](#custom-carriers)) |
 | `hooks.pre` | `[]string` | | `[]` | Shell commands to run before processing |
 | `hooks.post` | `[]string` | | `[]` | Shell commands to run after processing |
 
 > [!NOTE]
-> - Either `template` or `template_file` is required. If both are specified, `template` takes precedence.
-> - CLI arguments and flags take precedence over config file values.
+> - `template` can be an inline string or an object with `file` key pointing to a template file.
+> - **CLI override behavior:**
+>   - Package patterns (CLI args): **Override** `packages.patterns` when provided
+>   - `-test` flag: **Override** `test` config when explicitly passed
+
+### Package Filtering
+
+Control which packages are processed using `packages.patterns` and regex filters:
+
+```yaml
+packages:
+  patterns:
+    - ./...
+  regexps:
+    # Only process packages matching these patterns (empty = all)
+    only:
+      - /handler/
+      - /service/
+    # Skip packages matching these patterns
+    omit:
+      - /internal/
+      - /mock/
+      - _test$
+```
+
+Regex patterns are matched against the full import path (e.g., `github.com/user/repo/internal/util`).
+
+### Function Filtering
+
+Control which functions are processed using type, scope, and regex filters:
+
+```yaml
+functions:
+  # Filter by function type (enum, default: both)
+  types:
+    - function  # "function": Top-level functions without receivers
+    - method    # "method": Methods with receivers
+
+  # Filter by export scope (enum, default: both)
+  scopes:
+    - exported    # "exported": Public functions (e.g., GetUser)
+    - unexported  # "unexported": Private functions (e.g., parseInput)
+
+  # Regex filters on function names
+  regexps:
+    only:
+      - ^Handle   # Only functions starting with "Handle"
+    omit:
+      - Helper$   # Skip functions ending with "Helper"
+```
+
+**Example: Only instrument exported handlers**
+```yaml
+functions:
+  types: [function]
+  scopes: [exported]
+  regexps:
+    only: [^Handle]
+```
+
+**Example: Skip test helpers and mocks**
+```yaml
+functions:
+  regexps:
+    omit:
+      - Mock
+      - Helper$
+      - ^setup
+```
 
 ## Flags
 
@@ -114,7 +186,6 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 | `-test` | `false` | Process test files (`*_test.go`) |
 | `-remove` | `false` | Remove generated statements instead of adding them |
 | `-no-hooks` | `false` | Skip pre/post hooks defined in config |
-| `-exclude-regexps` | | Comma-separated regex patterns to exclude packages by import path |
 
 ### Examples
 
@@ -256,11 +327,39 @@ ctxweaver recognizes the following types as context carriers (checks the **first
 Add custom carriers in your config file:
 
 ```yaml
+# Simple form: array of carriers (default carriers remain enabled)
 carriers:
   - package: github.com/example/myapp/pkg/web
     type: Context
     accessor: .Ctx()
 ```
+
+To disable default carriers and use only custom ones:
+
+```yaml
+# Extended form: object with custom carriers and default toggle
+carriers:
+  custom:
+    - package: github.com/example/myapp/pkg/web
+      type: Context
+      accessor: .Ctx()
+  default: false  # Disable built-in carriers
+```
+
+#### Carrier Schema
+
+| Field | Type | Required | Description |
+|-------|------|:--------:|-------------|
+| `package` | `string` | ✅ | Import path of the package containing the type |
+| `type` | `string` | ✅ | Name of the type |
+| `accessor` | `string` | | Expression to extract `context.Context` (e.g., `.Context()`) |
+
+#### CarriersConfig Schema (Extended Form)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `custom` | `[]Carrier` | `[]` | Custom carrier definitions |
+| `default` | `bool` | `true` | Whether to include built-in default carriers |
 
 ## Directives
 

@@ -84,7 +84,9 @@ func extractReceiverTypeName(expr dst.Expr) (name string, hasGenerics bool) {
 		if ident, ok := t.X.(*dst.Ident); ok {
 			return ident.Name, true
 		}
-		// Nested generics: T[X[Y]] - recursively extract the outermost type name
+		// Nested generics: T[X[Y]] - recursively extract the outermost type name.
+		// These branches handle extremely rare nested generic receiver patterns.
+		// In practice, receiver types are almost always simple generics like T[X].
 		if inner, ok := t.X.(*dst.IndexExpr); ok {
 			name, _ := extractReceiverTypeName(inner)
 			return name, true

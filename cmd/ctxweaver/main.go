@@ -27,14 +27,13 @@ func main() {
 
 func run() error {
 	var (
-		configFile     string
-		dryRun         bool
-		verbose        bool
-		silent         bool
-		test           bool
-		remove         bool
-		noHooks        bool
-		excludeRegexps string
+		configFile string
+		dryRun     bool
+		verbose    bool
+		silent     bool
+		test       bool
+		remove     bool
+		noHooks    bool
 	)
 
 	flag.StringVar(&configFile, "config", "ctxweaver.yaml", "path to configuration file")
@@ -44,7 +43,6 @@ func run() error {
 	flag.BoolVar(&test, "test", false, "process test files")
 	flag.BoolVar(&remove, "remove", false, "remove generated statements instead of adding them")
 	flag.BoolVar(&noHooks, "no-hooks", false, "skip pre/post hooks")
-	flag.StringVar(&excludeRegexps, "exclude-regexps", "", "comma-separated regex patterns to exclude packages by import path")
 	flag.Parse()
 
 	// Load configuration
@@ -57,22 +55,20 @@ func run() error {
 	if isFlagPassed("test") {
 		cfg.Test = test
 	}
-	if isFlagPassed("exclude-regexps") && excludeRegexps != "" {
-		cfg.ExcludeRegexps = append(cfg.ExcludeRegexps, strings.Split(excludeRegexps, ",")...)
-	}
 
 	// Get patterns from args or config
 	patterns := flag.Args()
 	if len(patterns) == 0 {
-		patterns = cfg.Patterns
+		patterns = cfg.Packages.Patterns
 	}
 	if len(patterns) == 0 {
-		patterns = []string{"./..."}
+		return fmt.Errorf("no patterns specified: use command line args or packages.patterns in config")
 	}
 
-	// Validate
-	if cfg.Template == "" {
-		return fmt.Errorf("template is required in config file")
+	// Get template content
+	tmplContent, err := cfg.Template.Content()
+	if err != nil {
+		return fmt.Errorf("failed to get template: %w", err)
 	}
 
 	// Run pre hooks
@@ -83,16 +79,16 @@ func run() error {
 	}
 
 	// Parse template
-	tmpl, err := template.Parse(cfg.Template)
+	tmpl, err := template.Parse(tmplContent)
 	if err != nil {
 		return fmt.Errorf("failed to parse template: %w", err)
 	}
 
 	// Create carrier registry
-	registry := config.NewCarrierRegistry()
+	registry := config.NewCarrierRegistry(cfg.Carriers.UseDefault())
 
 	// Register custom carriers from config
-	for _, c := range cfg.Carriers {
+	for _, c := range cfg.Carriers.Custom {
 		registry.Register(c)
 	}
 
@@ -105,7 +101,8 @@ func run() error {
 		processor.WithDryRun(dryRun),
 		processor.WithVerbose(verbose && !silent),
 		processor.WithRemove(remove),
-		processor.WithExcludeRegexps(cfg.ExcludeRegexps),
+		processor.WithPackageRegexps(cfg.Packages.Regexps),
+		processor.WithFunctions(cfg.Functions),
 	)
 
 	// Print ctxweaver execution header

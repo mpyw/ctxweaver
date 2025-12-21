@@ -30,29 +30,63 @@
 #   - Generic function:               "service.Process[...]"
 #   - Generic method (pointer):       "service.(*Container[...]).Get"
 #   - Generic method (value):         "service.Wrapper[...].Unwrap"
+#
+# Can be specified as:
+#   - Inline string: template: "defer trace({{.Ctx}})"
+#   - File reference: template: { file: ./template.go.tmpl }
 template: |
   defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()
-
-# Alternative: Load template from a file instead of inline.
-# If both template and template_file are specified, template takes precedence.
-# template_file: ./template.go.tmpl
 
 # Imports to add when the template is inserted.
 # These are automatically added via goimports when a function is instrumented.
 imports:
   - github.com/newrelic/go-agent/v3/newrelic
 
-# Package patterns to process.
-# Uses the same syntax as `go list` (e.g., "./...", "./pkg/...", "github.com/user/repo/...").
-# Can be overridden by command-line arguments.
-patterns:
-  - ./...
+# Package configuration
+packages:
+  # Package patterns to process.
+  # Uses the same syntax as `go list` (e.g., "./...", "./pkg/...", "github.com/user/repo/...").
+  # Can be overridden by command-line arguments.
+  patterns:
+    - ./...
+
+  # Regex filters for package import paths (optional)
+  # regexps:
+  #   # Only process packages matching these patterns (empty = process all)
+  #   only:
+  #     - /handler/
+  #     - /service/
+  #   # Skip packages matching these patterns
+  #   omit:
+  #     - /internal/
+  #     - /mock/
+  #     - _test$
+
+# Function filtering configuration (optional)
+# functions:
+#   # Filter by function type (default: all types)
+#   types:
+#     - function  # Top-level functions
+#     - method    # Methods with receivers
+#
+#   # Filter by export scope (default: all scopes)
+#   scopes:
+#     - exported    # Public functions (e.g., GetUser)
+#     - unexported  # Private functions (e.g., parseInput)
+#
+#   # Regex filters for function names (optional)
+#   regexps:
+#     only:
+#       - ^Handle   # Only process functions starting with "Handle"
+#     omit:
+#       - Helper$   # Skip functions ending with "Helper"
+#       - ^test     # Skip functions starting with "test"
 
 # Whether to process test files (*_test.go).
 # Can be overridden by --test flag.
 test: false
 
-# Custom context carrier definitions.
+# Context carrier configuration.
 # ctxweaver comes with built-in support for common carriers:
 #   - context.Context
 #   - *http.Request (net/http)
@@ -62,11 +96,19 @@ test: false
 #   - cli.Context (github.com/urfave/cli/v2)
 #   - *cobra.Command (github.com/spf13/cobra)
 #
-# Add custom carriers here for your own types that wrap context.Context.
-carriers:
+# Simple form: array of custom carriers (default carriers remain enabled)
+carriers: []
   # - package: github.com/example/myframework
   #   type: Context
   #   accessor: .Context()  # How to extract context.Context from this type
+
+# Extended form: disable default carriers and use only custom ones
+# carriers:
+#   custom:
+#     - package: github.com/example/myframework
+#       type: Context
+#       accessor: .Context()
+#   default: false  # Set to false to disable built-in carriers
 
 # Shell commands to run before and after processing.
 # Use --no-hooks flag to skip hooks (useful for CI).

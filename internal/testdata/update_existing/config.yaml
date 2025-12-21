@@ -4,3 +4,6 @@ template: |
 imports:
   - "go.opentelemetry.io/otel"
 skip_remove: true
+packages:
+  patterns:
+    - ./...

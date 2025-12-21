@@ -1,1 +1,4 @@
 skip_remove: true
+packages:
+  patterns:
+    - ./...

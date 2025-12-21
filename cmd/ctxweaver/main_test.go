@@ -173,7 +173,9 @@ func TestCLI_Integration(t *testing.T) {
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
-patterns: []
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -225,7 +227,9 @@ func Foo(ctx context.Context) {
 		configPath := filepath.Join(tmpDir, "hook_fail.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
-patterns: []
+packages:
+  patterns:
+    - ./...
 hooks:
   pre:
     - "exit 1"
@@ -269,7 +273,9 @@ func TestRun(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `imports: []
-patterns: []
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -291,6 +297,9 @@ patterns: []
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Invalid"
 imports: []
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -311,8 +320,9 @@ imports: []
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
-patterns:
-  - "./..."
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -353,6 +363,9 @@ func Foo(ctx context.Context) {
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -391,6 +404,9 @@ func Foo(ctx context.Context) {
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -432,6 +448,9 @@ func Foo(ctx context.Context) {
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 hooks:
   post:
     - "echo done"
@@ -461,6 +480,9 @@ hooks:
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 hooks:
   pre:
     - "exit 1"
@@ -490,6 +512,9 @@ hooks:
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 hooks:
   pre:
     - "exit 1"
@@ -522,6 +547,9 @@ hooks:
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 hooks:
   post:
     - "exit 1"
@@ -554,6 +582,9 @@ hooks:
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 test: false
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
@@ -581,6 +612,9 @@ test: false
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 carriers:
   - package: "net/http"
     type: "Request"
@@ -620,12 +654,14 @@ func Handler(r *http.Request) {
 		}
 	})
 
-	t.Run("default patterns when none specified", func(t *testing.T) {
+	t.Run("no patterns error", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
-		// Config without patterns - should default to "./..."
+		// Config without packages.patterns - should error
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns: []
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -636,27 +672,14 @@ imports: []
 			t.Fatalf("failed to write go.mod: %v", err)
 		}
 
-		goFile := filepath.Join(tmpDir, "test.go")
-		goCode := `package test
-
-import "context"
-
-func Foo(ctx context.Context) {
-}
-`
-		if err := os.WriteFile(goFile, []byte(goCode), 0o644); err != nil {
-			t.Fatalf("failed to write go file: %v", err)
-		}
-
 		oldWd, _ := os.Getwd()
 		_ = os.Chdir(tmpDir)
 		defer func() { _ = os.Chdir(oldWd) }()
 
-		// No patterns in args, should use default "./..."
 		setup("-config", configPath, "-silent")
 		err := run()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
+		if err == nil {
+			t.Error("expected error for empty patterns")
 		}
 	})
 
@@ -665,6 +688,9 @@ func Foo(ctx context.Context) {
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 		config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 `
 		if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 			t.Fatalf("failed to write config: %v", err)
@@ -718,7 +744,9 @@ func TestCLI_ConfigOverride(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 	config := `template: "defer trace({{.Ctx}})"
 imports: []
-patterns: []
+packages:
+  patterns:
+    - ./...
 test: true
 `
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
@@ -763,6 +791,9 @@ func TestRun_PackageWithSyntaxError(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 	config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 `
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
@@ -812,6 +843,9 @@ func TestRun_PackageWithTypeError(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 	config := `template: "defer trace({{.Ctx}})"
 imports: []
+packages:
+  patterns:
+    - ./...
 `
 	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
 		t.Fatalf("failed to write config: %v", err)

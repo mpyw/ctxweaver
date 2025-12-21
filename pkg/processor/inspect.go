@@ -18,6 +18,17 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	return decl.Type.Params.List[0]
 }
 
+// isExportedFunc checks if a function name is exported (starts with uppercase).
+// The empty name check is defensive: Go parser rejects functions without names,
+// so this branch is unreachable in normal operation.
+func isExportedFunc(name string) bool {
+	if name == "" {
+		return false
+	}
+	r := rune(name[0])
+	return r >= 'A' && r <= 'Z'
+}
+
 // processFunctions processes functions in the DST file.
 // Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
 func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error) {
@@ -37,6 +48,13 @@ func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error)
 
 		// Skip if no body
 		if decl.Body == nil {
+			return true
+		}
+
+		// Check function filter
+		isMethod := decl.Recv != nil && len(decl.Recv.List) > 0
+		isExported := isExportedFunc(decl.Name.Name)
+		if p.funcFilter != nil && !p.funcFilter.Match(decl.Name.Name, isMethod, isExported) {
 			return true
 		}
 

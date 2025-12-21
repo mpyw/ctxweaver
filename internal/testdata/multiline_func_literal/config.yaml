@@ -5,3 +5,6 @@ template: |
   }()
 imports:
   - github.com/newrelic/go-agent/v3/newrelic
+packages:
+  patterns:
+    - ./...

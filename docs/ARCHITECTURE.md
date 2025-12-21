@@ -92,14 +92,46 @@ pkgs, err := packages.Load(cfg, patterns...)
 ```yaml
 template: |
   defer apm.StartSegment({{.Ctx}}, {{.FuncName | quote}}).End()
+# Or load from file:
+# template:
+#   file: ./templates/trace.tmpl
+
 imports:
   - github.com/example/myapp/internal/apm
+
+packages:
+  patterns:
+    - ./...
+  regexps:
+    only: []      # Only process packages matching these (empty = all)
+    omit:         # Skip packages matching these
+      - /mock/
+      - _test$
+
+functions:
+  types:          # Enum: "function" | "method" (default: both)
+    - function
+    - method
+  scopes:         # Enum: "exported" | "unexported" (default: both)
+    - exported
+    - unexported
+  regexps:
+    only: []      # Regex patterns - only process matching (empty = all)
+    omit: []      # Regex patterns - skip matching
+
+# Simple form (array)
 carriers:
   - package: github.com/custom/ctx
     type: Context
     accessor: .GetContext()
-patterns:
-  - ./...
+
+# Extended form (disable defaults)
+# carriers:
+#   custom:
+#     - package: github.com/custom/ctx
+#       type: Context
+#   default: false
+
 test: false
 ```
 
@@ -113,7 +145,52 @@ test: false
 - Clear separation from user config
 - Users can override or extend
 
-### 5. First Parameter Only
+### 5. Carriers Union Type
+
+**Decision**: Support both simple array and extended object forms for carriers.
+
+**Rationale**:
+- Simple form covers most use cases (add custom carriers while keeping defaults)
+- Extended form allows disabling default carriers for full control
+- Consistent with template union type pattern
+
+**Implementation**:
+```yaml
+# Simple array (default carriers enabled)
+carriers:
+  - package: github.com/custom/ctx
+    type: Context
+
+# Extended object (control default carriers)
+carriers:
+  custom:
+    - package: github.com/custom/ctx
+      type: Context
+  default: false  # Disable built-in carriers
+```
+
+### 6. Template Union Type
+
+**Decision**: Support both inline strings and file references for templates.
+
+**Rationale**:
+- Simple templates work well inline in YAML
+- Complex templates (multi-line, conditional logic) are easier to maintain in separate files
+- File templates can be shared across projects
+- YAML custom unmarshaling handles the union type transparently
+
+**Implementation**:
+```yaml
+# Inline string
+template: |
+  defer trace({{.Ctx}})
+
+# File reference
+template:
+  file: ./templates/trace.tmpl
+```
+
+### 7. First Parameter Only
 
 **Decision**: Only check the first function parameter for context carriers.
 
@@ -123,7 +200,7 @@ test: false
 - Avoids ambiguity with multiple context-like parameters
 - Reduces false positives
 
-### 6. Statement Pattern Detection
+### 8. Statement Pattern Detection
 
 **Decision**: Detect existing statements by structural pattern matching.
 
@@ -135,7 +212,7 @@ test: false
 **Current implementation**: Specific to `defer XXX.StartSegment(ctx, "name").End()` pattern.
 Future work could generalize this.
 
-### 7. No Built-in Import Ordering
+### 9. No Built-in Import Ordering
 
 **Decision**: Do not integrate `gci` or implement import ordering.
 
@@ -145,29 +222,54 @@ Future work could generalize this.
 - `goimports`/`gci` do this well
 - Reduces complexity and dependencies
 
+### 10. CLI Override Behavior
+
+**Decision**: CLI arguments override (not merge) config file values.
+
+**Behavior**:
+| Source | Config Field | CLI | Behavior |
+|--------|--------------|-----|----------|
+| Package patterns | `packages.patterns` | positional args | **Override**: CLI args replace config entirely |
+| Test mode | `test` | `-test` | **Override**: Only when flag is explicitly passed |
+
+**Rationale**:
+- Simple mental model: CLI takes precedence
+- Explicit flag detection via `flag.Visit()` for boolean overrides
+- No complex merge logic to reason about
+
 ## File Processing Pipeline
 
 ```
 1. Load config (YAML)
-2. Parse template
-3. Create carrier registry (defaults + custom)
-4. packages.Load(patterns)
-5. For each package:
-   For each file:
-     a. Check file-level skip directive
-     b. Parse with fresh fset
-     c. Convert AST → DST
-     d. For each function:
-        - Check function-level skip
-        - Check first parameter for carrier match
-        - Render template with variables
-        - Detect existing statement
-        - Insert/Update/Skip
-     e. If modified:
-        - Convert DST → AST
-        - Add imports via astutil
-        - Format and write
-6. Report results
+2. Set defaults (types, scopes)
+3. Parse template (inline or from file)
+4. Create carrier registry (defaults + custom)
+5. Compile regex patterns (packages.regexps, functions.regexps)
+6. Run pre-hooks (if not --no-hooks)
+7. packages.Load(patterns)
+8. For each package:
+   a. Check packages.regexps.only (skip if not matching)
+   b. Check packages.regexps.omit (skip if matching)
+   c. For each file:
+      - Check file-level skip directive
+      - Parse with fresh fset
+      - Convert AST → DST
+      - For each function:
+        * Check function-level skip directive
+        * Check functions.types filter (function/method)
+        * Check functions.scopes filter (exported/unexported)
+        * Check functions.regexps.only filter
+        * Check functions.regexps.omit filter
+        * Check first parameter for carrier match
+        * Render template with variables
+        * Detect existing statement
+        * Insert/Update/Remove/Skip
+      - If modified:
+        * Convert DST → AST
+        * Add imports via astutil
+        * Format and write
+9. Run post-hooks (if not --no-hooks)
+10. Report results
 ```
 
 ## Template Variables
@@ -187,6 +289,55 @@ Future work could generalize this.
 | `IsGenericFunc` | decl.Type.TypeParams != nil | `true` |
 | `IsGenericReceiver` | receiver has type params | `true` |
 
+## Filtering Mechanisms
+
+### Package Filtering
+
+Package filtering uses regex patterns matched against full import paths:
+
+```
+packages:
+  regexps:
+    only: [/handler/, /service/]  # Whitelist (empty = all)
+    omit: [/mock/, _test$]        # Blacklist
+```
+
+**Filtering Logic**:
+1. If `only` is non-empty: package must match at least one pattern
+2. If `omit` matches: package is skipped regardless of `only`
+3. Invalid regex patterns are logged as warnings and skipped
+
+### Function Filtering
+
+Function filtering combines type, scope, and regex criteria:
+
+```
+functions:
+  types: [function, method]       # Enum: "function" | "method"
+  scopes: [exported, unexported]  # Enum: "exported" | "unexported"
+  regexps:
+    only: [^Handle]               # Regex patterns (whitelist)
+    omit: [Mock, Helper$]         # Regex patterns (blacklist)
+```
+
+**Type Filtering** (enum values):
+- `"function"`: Top-level functions without receivers
+- `"method"`: Functions with receivers (value or pointer)
+
+**Scope Filtering** (enum values):
+- `"exported"`: Functions starting with uppercase (e.g., `GetUser`)
+- `"unexported"`: Functions starting with lowercase (e.g., `parseInput`)
+
+**Filtering Order**:
+1. Skip directive check
+2. Type filter (function/method)
+3. Scope filter (exported/unexported)
+4. Regex `only` filter
+5. Regex `omit` filter
+6. Carrier match check
+
+All filters must pass for a function to be processed.
+
 ## Error Handling
 
 - **Config errors**: Fail fast (user configuration error)
@@ -194,6 +345,9 @@ Future work could generalize this.
 - **Template errors**: Fail fast (configuration error)
 - **Write errors**: Report and continue (best effort)
 - **Package load errors**: Report and continue
+- **Invalid regex patterns**: Log warning and skip the pattern (continue processing)
+- **Pre-hook failures**: Abort processing, no files modified
+- **Post-hook failures**: Log error but files already modified
 
 ## Future Considerations
 

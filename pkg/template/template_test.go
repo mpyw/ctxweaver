@@ -181,3 +181,16 @@ func TestMustParse_Panic(t *testing.T) {
 
 	MustParse(`{{.Invalid`)
 }
+
+func TestTemplate_Render_Error(t *testing.T) {
+	// Test rendering with missing required variable causes error
+	tmpl, err := Parse(`{{.NonExistent.Field}}`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	_, err = tmpl.Render(Vars{})
+	if err == nil {
+		t.Error("Render() should error when accessing non-existent field")
+	}
+}
