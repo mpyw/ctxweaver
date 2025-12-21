@@ -100,7 +100,7 @@ See [`ctxweaver.example.yaml`](./ctxweaver.example.yaml) for a complete example 
 | `functions.regexps.only` | `[]string` | | `[]` | Only process functions matching these regex patterns |
 | `functions.regexps.omit` | `[]string` | | `[]` | Skip functions matching these regex patterns |
 | `test` | `bool` | | `false` | Whether to process test files (overridden by `-test` flag) |
-| `carriers` | `[]Carrier \| CarriersConfig` | | `[]` | Context carrier configuration (see below) |
+| `carriers` | `[]Carrier \| CarriersConfig` | | `[]` | Context carrier configuration (see [Custom Carriers](#custom-carriers)) |
 | `hooks.pre` | `[]string` | | `[]` | Shell commands to run before processing |
 | `hooks.post` | `[]string` | | `[]` | Shell commands to run after processing |
 
