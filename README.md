@@ -223,8 +223,6 @@ ctxweaver -no-hooks ./...
 > # Step 3: Re-run to insert with the NEW template
 > ctxweaver ./...
 > ```
->
-> A future `--refresh` flag may automate this, but it would require storing the previous template or using marker comments (e.g., `// ctxweaver:generated`) to identify generated statements regardless of template changes.
 
 ## Template System
 
