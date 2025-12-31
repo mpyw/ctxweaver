@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/dave/dst"
+
 	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
+
 	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 
