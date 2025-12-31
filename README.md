@@ -1,8 +1,9 @@
 # ctxweaver
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/mpyw/ctxweaver.svg)](https://pkg.go.dev/github.com/mpyw/ctxweaver)
-[![Go Report Card](https://goreportcard.com/badge/github.com/mpyw/ctxweaver)](https://goreportcard.com/report/github.com/mpyw/ctxweaver)
+[![CI](https://github.com/mpyw/ctxweaver/actions/workflows/ci.yml/badge.svg)](https://github.com/mpyw/ctxweaver/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/mpyw/ctxweaver/graph/badge.svg)](https://codecov.io/gh/mpyw/ctxweaver)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mpyw/ctxweaver)](https://goreportcard.com/report/github.com/mpyw/ctxweaver)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > [!NOTE]
