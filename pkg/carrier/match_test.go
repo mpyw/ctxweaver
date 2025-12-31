@@ -1,14 +1,17 @@
-package carrier
+package carrier_test
 
 import (
 	"testing"
 
 	"github.com/dave/dst"
 
+	"github.com/mpyw/ctxweaver/pkg/carrier"
 	"github.com/mpyw/ctxweaver/pkg/config"
 )
 
 func TestMatch(t *testing.T) {
+	t.Parallel()
+
 	// Create a test registry with known carriers
 	registry := config.NewCarrierRegistry(true)
 	registry.Register(config.CarrierDef{
@@ -156,7 +159,9 @@ func TestMatch(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			result := Match(tt.param, registry)
+			t.Parallel()
+
+			result := carrier.Match(tt.param, registry)
 
 			gotMatch := result != nil
 			if gotMatch != tt.wantMatch {

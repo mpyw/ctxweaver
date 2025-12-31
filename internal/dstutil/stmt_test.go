@@ -1,4 +1,4 @@
-package dstutil
+package dstutil_test
 
 import (
 	"go/ast"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
+
+	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 
 // stmtsToStrings converts DST statements to their string representations.
@@ -57,6 +59,8 @@ func stmtToString(stmt dst.Stmt) string {
 }
 
 func TestParseStatements(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		input     string
 		wantCount int
@@ -93,7 +97,9 @@ defer seg.End()`,
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			stmts, err := ParseStatements(tt.input)
+			t.Parallel()
+
+			stmts, err := dstutil.ParseStatements(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseStatements() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -109,7 +115,11 @@ defer seg.End()`,
 }
 
 func TestInsertStatements(t *testing.T) {
+	t.Parallel()
+
 	t.Run("single statement", func(t *testing.T) {
+		t.Parallel()
+
 		body := &dst.BlockStmt{
 			List: []dst.Stmt{
 				&dst.ExprStmt{X: &dst.Ident{Name: "existing"}},
@@ -117,7 +127,7 @@ func TestInsertStatements(t *testing.T) {
 		}
 
 		stmt := `defer trace(ctx)`
-		if !InsertStatements(body, stmt) {
+		if !dstutil.InsertStatements(body, stmt) {
 			t.Error("InsertStatements() returned false")
 		}
 
@@ -136,6 +146,8 @@ func TestInsertStatements(t *testing.T) {
 	})
 
 	t.Run("multiple statements", func(t *testing.T) {
+		t.Parallel()
+
 		body := &dst.BlockStmt{
 			List: []dst.Stmt{
 				&dst.ExprStmt{X: &dst.Ident{Name: "existing"}},
@@ -144,7 +156,7 @@ func TestInsertStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "test.Foo")
 defer span.End()`
-		if !InsertStatements(body, stmt) {
+		if !dstutil.InsertStatements(body, stmt) {
 			t.Error("InsertStatements() returned false")
 		}
 
@@ -167,7 +179,11 @@ defer span.End()`
 }
 
 func TestUpdateStatements(t *testing.T) {
+	t.Parallel()
+
 	t.Run("single statement", func(t *testing.T) {
+		t.Parallel()
+
 		body := &dst.BlockStmt{
 			List: []dst.Stmt{
 				mustParseStmt(t, `defer apm.StartSegment(ctx, "old.Func").End()`),
@@ -176,7 +192,7 @@ func TestUpdateStatements(t *testing.T) {
 		}
 
 		stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-		if !UpdateStatements(body, 0, 1, stmt) {
+		if !dstutil.UpdateStatements(body, 0, 1, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -195,6 +211,8 @@ func TestUpdateStatements(t *testing.T) {
 	})
 
 	t.Run("multiple statements", func(t *testing.T) {
+		t.Parallel()
+
 		body := &dst.BlockStmt{
 			List: []dst.Stmt{
 				mustParseStmt(t, `ctx, span := otel.Tracer("").Start(ctx, "old.Func")`),
@@ -205,7 +223,7 @@ func TestUpdateStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "new.Func")
 defer span.End()`
-		if !UpdateStatements(body, 0, 2, stmt) {
+		if !dstutil.UpdateStatements(body, 0, 2, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -227,6 +245,8 @@ defer span.End()`
 	})
 
 	t.Run("replace more with fewer statements", func(t *testing.T) {
+		t.Parallel()
+
 		body := &dst.BlockStmt{
 			List: []dst.Stmt{
 				mustParseStmt(t, `a := 1`),
@@ -237,7 +257,7 @@ defer span.End()`
 		}
 
 		stmt := `x := 100`
-		if !UpdateStatements(body, 0, 3, stmt) {
+		if !dstutil.UpdateStatements(body, 0, 3, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -248,6 +268,8 @@ defer span.End()`
 }
 
 func TestRemoveStatements(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		initialLen  int
 		removeIdx   int
@@ -322,13 +344,15 @@ func TestRemoveStatements(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			// Create body with n statements
 			body := &dst.BlockStmt{List: make([]dst.Stmt, tt.initialLen)}
 			for i := range body.List {
 				body.List[i] = &dst.ExprStmt{X: &dst.Ident{Name: "stmt"}}
 			}
 
-			got := RemoveStatements(body, tt.removeIdx, tt.removeCount)
+			got := dstutil.RemoveStatements(body, tt.removeIdx, tt.removeCount)
 			if got != tt.wantResult {
 				t.Errorf("RemoveStatements() = %v, want %v", got, tt.wantResult)
 			}
@@ -340,6 +364,8 @@ func TestRemoveStatements(t *testing.T) {
 }
 
 func TestStmtsToStrings(t *testing.T) {
+	t.Parallel()
+
 	stmts := []dst.Stmt{
 		mustParseStmt(t, `x := 1`),
 		mustParseStmt(t, `defer foo()`),

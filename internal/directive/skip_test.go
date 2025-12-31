@@ -1,12 +1,16 @@
-package directive
+package directive_test
 
 import (
 	"testing"
 
 	"github.com/dave/dst"
+
+	"github.com/mpyw/ctxweaver/internal/directive"
 )
 
 func TestIsSkipComment(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		input string
 		want  bool
@@ -59,15 +63,19 @@ func TestIsSkipComment(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := isSkipComment(tt.input)
+			t.Parallel()
+
+			got := directive.IsSkipComment(tt.input)
 			if got != tt.want {
-				t.Errorf("isSkipComment(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("IsSkipComment(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestHasSkipDirective(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		decs *dst.NodeDecs
 		want bool
@@ -114,7 +122,9 @@ func TestHasSkipDirective(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := HasSkipDirective(tt.decs)
+			t.Parallel()
+
+			got := directive.HasSkipDirective(tt.decs)
 			if got != tt.want {
 				t.Errorf("HasSkipDirective() = %v, want %v", got, tt.want)
 			}
@@ -123,6 +133,8 @@ func TestHasSkipDirective(t *testing.T) {
 }
 
 func TestHasStmtSkipDirective(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		stmt dst.Stmt
 		want bool
@@ -208,7 +220,9 @@ func TestHasStmtSkipDirective(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := HasStmtSkipDirective(tt.stmt)
+			t.Parallel()
+
+			got := directive.HasStmtSkipDirective(tt.stmt)
 			if got != tt.want {
 				t.Errorf("HasStmtSkipDirective() = %v, want %v", got, tt.want)
 			}
