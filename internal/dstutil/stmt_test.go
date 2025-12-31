@@ -190,7 +190,7 @@ func TestUpdateStatements(t *testing.T) {
 		}
 
 		stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-		if !UpdateStatements(body,0, 1, stmt) {
+		if !UpdateStatements(body, 0, 1, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -221,7 +221,7 @@ func TestUpdateStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "new.Func")
 defer span.End()`
-		if !UpdateStatements(body,0, 2, stmt) {
+		if !UpdateStatements(body, 0, 2, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -255,7 +255,7 @@ defer span.End()`
 		}
 
 		stmt := `x := 100`
-		if !UpdateStatements(body,0, 3, stmt) {
+		if !UpdateStatements(body, 0, 3, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
