@@ -1,10 +1,14 @@
-package template
+package template_test
 
 import (
 	"testing"
+
+	"github.com/mpyw/ctxweaver/pkg/template"
 )
 
 func TestParse(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		input   string
 		wantErr bool
@@ -30,7 +34,9 @@ defer span.End()`,
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := Parse(tt.input)
+			t.Parallel()
+
+			_, err := template.Parse(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -39,41 +45,43 @@ defer span.End()`,
 }
 
 func TestTemplate_Render(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
-		template string
-		vars     Vars
-		want     string
+		tmpl string
+		vars template.Vars
+		want string
 	}{
 		"simple context": {
-			template: `defer trace({{.Ctx}})`,
-			vars:     Vars{Ctx: "ctx"},
-			want:     `defer trace(ctx)`,
+			tmpl: `defer trace({{.Ctx}})`,
+			vars: template.Vars{Ctx: "ctx"},
+			want: `defer trace(ctx)`,
 		},
 		"echo context with accessor": {
-			template: `defer trace({{.Ctx}})`,
-			vars:     Vars{Ctx: "c.Request().Context()"},
-			want:     `defer trace(c.Request().Context())`,
+			tmpl: `defer trace({{.Ctx}})`,
+			vars: template.Vars{Ctx: "c.Request().Context()"},
+			want: `defer trace(c.Request().Context())`,
 		},
 		"with quoted func name": {
-			template: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
-			vars: Vars{
+			tmpl: `defer newrelic.FromContext({{.Ctx}}).StartSegment({{.FuncName | quote}}).End()`,
+			vars: template.Vars{
 				Ctx:      "ctx",
 				FuncName: "pkg.(*Service).Method",
 			},
 			want: `defer newrelic.FromContext(ctx).StartSegment("pkg.(*Service).Method").End()`,
 		},
 		"with backtick func name": {
-			template: `defer trace({{.Ctx}}, {{.FuncName | backtick}})`,
-			vars: Vars{
+			tmpl: `defer trace({{.Ctx}}, {{.FuncName | backtick}})`,
+			vars: template.Vars{
 				Ctx:      "ctx",
 				FuncName: "pkg.Func",
 			},
 			want: "defer trace(ctx, `pkg.Func`)",
 		},
 		"all variables": {
-			template: `// {{.FuncName}} in {{.PackagePath}}
+			tmpl: `// {{.FuncName}} in {{.PackagePath}}
 defer trace({{.Ctx}}, {{.FuncBaseName | quote}})`,
-			vars: Vars{
+			vars: template.Vars{
 				Ctx:          "ctx",
 				CtxVar:       "ctx",
 				FuncName:     "myapp.(*Service).Process",
@@ -88,9 +96,9 @@ defer trace({{.Ctx}}, {{.FuncBaseName | quote}})`,
 defer trace(ctx, "Process")`,
 		},
 		"conditional method": {
-			template: `{{if .IsMethod}}// method on {{.ReceiverType}}{{else}}// function{{end}}
+			tmpl: `{{if .IsMethod}}// method on {{.ReceiverType}}{{else}}// function{{end}}
 defer trace({{.Ctx}})`,
-			vars: Vars{
+			vars: template.Vars{
 				Ctx:          "ctx",
 				IsMethod:     true,
 				ReceiverType: "Handler",
@@ -99,9 +107,9 @@ defer trace({{.Ctx}})`,
 defer trace(ctx)`,
 		},
 		"conditional function": {
-			template: `{{if .IsMethod}}// method{{else}}// function{{end}}
+			tmpl: `{{if .IsMethod}}// method{{else}}// function{{end}}
 defer trace({{.Ctx}})`,
-			vars: Vars{
+			vars: template.Vars{
 				Ctx:      "ctx",
 				IsMethod: false,
 			},
@@ -109,9 +117,9 @@ defer trace({{.Ctx}})`,
 defer trace(ctx)`,
 		},
 		"generic receiver": {
-			template: `{{if .IsGenericReceiver}}// generic type{{end}}
+			tmpl: `{{if .IsGenericReceiver}}// generic type{{end}}
 defer trace({{.Ctx}}, {{.FuncName | quote}})`,
-			vars: Vars{
+			vars: template.Vars{
 				Ctx:               "ctx",
 				FuncName:          "pkg.(*Container[...]).Process",
 				ReceiverType:      "Container",
@@ -123,9 +131,9 @@ defer trace({{.Ctx}}, {{.FuncName | quote}})`,
 defer trace(ctx, "pkg.(*Container[...]).Process")`,
 		},
 		"generic function": {
-			template: `{{if .IsGenericFunc}}// generic func{{end}}
+			tmpl: `{{if .IsGenericFunc}}// generic func{{end}}
 defer trace({{.Ctx}}, {{.FuncName | quote}})`,
-			vars: Vars{
+			vars: template.Vars{
 				Ctx:           "ctx",
 				FuncName:      "pkg.Transform[...]",
 				FuncBaseName:  "Transform",
@@ -135,8 +143,8 @@ defer trace({{.Ctx}}, {{.FuncName | quote}})`,
 defer trace(ctx, "pkg.Transform[...]")`,
 		},
 		"conditional generic handling": {
-			template: `{{if or .IsGenericFunc .IsGenericReceiver}}// has generics{{else}}// no generics{{end}}`,
-			vars: Vars{
+			tmpl: `{{if or .IsGenericFunc .IsGenericReceiver}}// has generics{{else}}// no generics{{end}}`,
+			vars: template.Vars{
 				IsGenericFunc:     false,
 				IsGenericReceiver: true,
 			},
@@ -146,7 +154,9 @@ defer trace(ctx, "pkg.Transform[...]")`,
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			tmpl, err := Parse(tt.template)
+			t.Parallel()
+
+			tmpl, err := template.Parse(tt.tmpl)
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
@@ -164,8 +174,10 @@ defer trace(ctx, "pkg.Transform[...]")`,
 }
 
 func TestTemplate_Raw(t *testing.T) {
+	t.Parallel()
+
 	raw := `defer trace({{.Ctx}})`
-	tmpl := MustParse(raw)
+	tmpl := template.MustParse(raw)
 
 	if tmpl.Raw() != raw {
 		t.Errorf("Raw() = %q, want %q", tmpl.Raw(), raw)
@@ -173,23 +185,27 @@ func TestTemplate_Raw(t *testing.T) {
 }
 
 func TestMustParse_Panic(t *testing.T) {
+	t.Parallel()
+
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("MustParse() should panic on invalid template")
 		}
 	}()
 
-	MustParse(`{{.Invalid`)
+	template.MustParse(`{{.Invalid`)
 }
 
 func TestTemplate_Render_Error(t *testing.T) {
+	t.Parallel()
+
 	// Test rendering with missing required variable causes error
-	tmpl, err := Parse(`{{.NonExistent.Field}}`)
+	tmpl, err := template.Parse(`{{.NonExistent.Field}}`)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
 
-	_, err = tmpl.Render(Vars{})
+	_, err = tmpl.Render(template.Vars{})
 	if err == nil {
 		t.Error("Render() should error when accessing non-existent field")
 	}

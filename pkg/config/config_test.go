@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"os"
@@ -7,10 +7,14 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/mpyw/ctxweaver/pkg/config"
 )
 
 func TestNewCarrierRegistry(t *testing.T) {
-	r := NewCarrierRegistry(true)
+	t.Parallel()
+
+	r := config.NewCarrierRegistry(true)
 
 	// Check default carriers are loaded
 	tests := map[string]struct {
@@ -57,6 +61,8 @@ func TestNewCarrierRegistry(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			c, ok := r.Lookup(tt.pkg, tt.typ)
 			if !ok {
 				t.Errorf("Lookup(%q, %q) not found", tt.pkg, tt.typ)
@@ -70,23 +76,25 @@ func TestNewCarrierRegistry(t *testing.T) {
 }
 
 func TestCarrierDef_BuildContextExpr(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
-		carrier CarrierDef
+		carrier config.CarrierDef
 		varName string
 		want    string
 	}{
 		"context.Context": {
-			carrier: CarrierDef{Accessor: ""},
+			carrier: config.CarrierDef{Accessor: ""},
 			varName: "ctx",
 			want:    "ctx",
 		},
 		"echo.Context": {
-			carrier: CarrierDef{Accessor: ".Request().Context()"},
+			carrier: config.CarrierDef{Accessor: ".Request().Context()"},
 			varName: "c",
 			want:    "c.Request().Context()",
 		},
 		"cli.Context": {
-			carrier: CarrierDef{Accessor: ".Context"},
+			carrier: config.CarrierDef{Accessor: ".Context"},
 			varName: "cliCtx",
 			want:    "cliCtx.Context",
 		},
@@ -94,6 +102,8 @@ func TestCarrierDef_BuildContextExpr(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			got := tt.carrier.BuildContextExpr(tt.varName)
 			if got != tt.want {
 				t.Errorf("BuildContextExpr() = %q, want %q", got, tt.want)
@@ -103,6 +113,8 @@ func TestCarrierDef_BuildContextExpr(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
+	t.Parallel()
+
 	// Create temp config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
@@ -128,7 +140,7 @@ test: true
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -173,6 +185,8 @@ test: true
 }
 
 func TestLoadConfig_WithTemplateFile(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	// Create template file
@@ -194,7 +208,7 @@ packages:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -209,7 +223,9 @@ packages:
 }
 
 func TestCarrierRegistry_All(t *testing.T) {
-	r := NewCarrierRegistry(true)
+	t.Parallel()
+
+	r := config.NewCarrierRegistry(true)
 
 	all := r.All()
 	if len(all) == 0 {
@@ -230,6 +246,8 @@ func TestCarrierRegistry_All(t *testing.T) {
 }
 
 func TestLoadConfig_UnknownField(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -243,7 +261,7 @@ unknown_field: "should cause error"
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for unknown field")
 	}
@@ -253,6 +271,8 @@ unknown_field: "should cause error"
 }
 
 func TestLoadConfig_InvalidCarrier_MissingPackage(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -267,7 +287,7 @@ carriers:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for carrier missing package")
 	}
@@ -277,6 +297,8 @@ carriers:
 }
 
 func TestLoadConfig_InvalidCarrier_MissingType(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -291,7 +313,7 @@ carriers:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for carrier missing type")
 	}
@@ -301,6 +323,8 @@ carriers:
 }
 
 func TestLoadConfig_InvalidCarrier_UnknownField(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -317,13 +341,15 @@ carriers:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for carrier with unknown field")
 	}
 }
 
 func TestLoadConfig_InvalidHooks_UnknownField(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -340,13 +366,15 @@ hooks:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for hooks with unknown field")
 	}
 }
 
 func TestLoadConfig_WrongType(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -359,20 +387,24 @@ packages:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for wrong type")
 	}
 }
 
 func TestLoadConfig_NonExistentFile(t *testing.T) {
-	_, err := LoadConfig("/nonexistent/path/config.yaml")
+	t.Parallel()
+
+	_, err := config.LoadConfig("/nonexistent/path/config.yaml")
 	if err == nil {
 		t.Error("expected error for non-existent file")
 	}
 }
 
 func TestLoadConfig_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -385,13 +417,15 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for invalid YAML syntax")
 	}
 }
 
 func TestLoadConfig_WithHooks(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -409,7 +443,7 @@ hooks:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -423,6 +457,8 @@ hooks:
 }
 
 func TestLoadConfig_WithPackageRegexps(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -441,7 +477,7 @@ packages:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -455,6 +491,8 @@ packages:
 }
 
 func TestLoadConfig_WithFunctions(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -478,7 +516,7 @@ functions:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -486,7 +524,7 @@ functions:
 	if len(cfg.Functions.Types) != 2 {
 		t.Errorf("Functions.Types = %v, want 2 elements", cfg.Functions.Types)
 	}
-	if len(cfg.Functions.Scopes) != 1 || cfg.Functions.Scopes[0] != FuncScopeExported {
+	if len(cfg.Functions.Scopes) != 1 || cfg.Functions.Scopes[0] != config.FuncScopeExported {
 		t.Errorf("Functions.Scopes = %v, want [exported]", cfg.Functions.Scopes)
 	}
 	if len(cfg.Functions.Regexps.Only) != 1 {
@@ -498,6 +536,8 @@ functions:
 }
 
 func TestTemplate_UnmarshalYAML(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		yaml       string
@@ -525,6 +565,8 @@ func TestTemplate_UnmarshalYAML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -537,7 +579,7 @@ packages:
 				t.Fatalf("failed to write config file: %v", err)
 			}
 
-			cfg, err := LoadConfig(configPath)
+			cfg, err := config.LoadConfig(configPath)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("LoadConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -556,6 +598,8 @@ packages:
 }
 
 func TestTemplate_UnmarshalYAML_InvalidType(t *testing.T) {
+	t.Parallel()
+
 	// Test that template as array/other type returns error via schema validation
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
@@ -572,7 +616,7 @@ packages:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	_, err := LoadConfig(configPath)
+	_, err := config.LoadConfig(configPath)
 	if err == nil {
 		t.Error("expected error for template as array")
 	}
@@ -583,9 +627,11 @@ packages:
 }
 
 func TestTemplate_UnmarshalYAML_DirectInvalidType(t *testing.T) {
+	t.Parallel()
+
 	// Directly test UnmarshalYAML with invalid node types (bypassing schema validation)
 	// This tests the library API when used directly without LoadConfig
-	var tmpl Template
+	var tmpl config.Template
 
 	// Test with sequence node (array)
 	seqNode := &yaml.Node{
@@ -601,7 +647,9 @@ func TestTemplate_UnmarshalYAML_DirectInvalidType(t *testing.T) {
 }
 
 func TestTemplate_Content_FileReadFailure(t *testing.T) {
-	tmpl := Template{
+	t.Parallel()
+
+	tmpl := config.Template{
 		File: "/nonexistent/path/template.txt",
 	}
 
@@ -615,7 +663,9 @@ func TestTemplate_Content_FileReadFailure(t *testing.T) {
 }
 
 func TestTemplate_Content_EmptyTemplate(t *testing.T) {
-	tmpl := Template{}
+	t.Parallel()
+
+	tmpl := config.Template{}
 
 	_, err := tmpl.Content()
 	if err == nil {
@@ -627,8 +677,12 @@ func TestTemplate_Content_EmptyTemplate(t *testing.T) {
 }
 
 func TestTemplate_MarshalYAML(t *testing.T) {
+	t.Parallel()
+
 	t.Run("marshal inline template", func(t *testing.T) {
-		tmpl := Template{Inline: "defer trace({{.Ctx}})"}
+		t.Parallel()
+
+		tmpl := config.Template{Inline: "defer trace({{.Ctx}})"}
 		result, err := tmpl.MarshalYAML()
 		if err != nil {
 			t.Fatalf("MarshalYAML() error = %v", err)
@@ -639,7 +693,9 @@ func TestTemplate_MarshalYAML(t *testing.T) {
 	})
 
 	t.Run("marshal file reference", func(t *testing.T) {
-		tmpl := Template{File: "./template.txt"}
+		t.Parallel()
+
+		tmpl := config.Template{File: "./template.txt"}
 		result, err := tmpl.MarshalYAML()
 		if err != nil {
 			t.Fatalf("MarshalYAML() error = %v", err)
@@ -655,7 +711,11 @@ func TestTemplate_MarshalYAML(t *testing.T) {
 }
 
 func TestCarriers_UnmarshalYAML(t *testing.T) {
+	t.Parallel()
+
 	t.Run("simple array form", func(t *testing.T) {
+		t.Parallel()
+
 		yamlContent := `
 carriers:
   - package: github.com/example/custom
@@ -663,7 +723,7 @@ carriers:
     accessor: .GetContext()
 `
 		var cfg struct {
-			Carriers Carriers `yaml:"carriers"`
+			Carriers config.Carriers `yaml:"carriers"`
 		}
 		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
 			t.Fatalf("Unmarshal error: %v", err)
@@ -677,6 +737,8 @@ carriers:
 	})
 
 	t.Run("extended form with default true", func(t *testing.T) {
+		t.Parallel()
+
 		yamlContent := `
 carriers:
   custom:
@@ -685,7 +747,7 @@ carriers:
   default: true
 `
 		var cfg struct {
-			Carriers Carriers `yaml:"carriers"`
+			Carriers config.Carriers `yaml:"carriers"`
 		}
 		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
 			t.Fatalf("Unmarshal error: %v", err)
@@ -699,6 +761,8 @@ carriers:
 	})
 
 	t.Run("extended form with default false", func(t *testing.T) {
+		t.Parallel()
+
 		yamlContent := `
 carriers:
   custom:
@@ -707,7 +771,7 @@ carriers:
   default: false
 `
 		var cfg struct {
-			Carriers Carriers `yaml:"carriers"`
+			Carriers config.Carriers `yaml:"carriers"`
 		}
 		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
 			t.Fatalf("Unmarshal error: %v", err)
@@ -721,12 +785,14 @@ carriers:
 	})
 
 	t.Run("extended form with empty custom", func(t *testing.T) {
+		t.Parallel()
+
 		yamlContent := `
 carriers:
   default: false
 `
 		var cfg struct {
-			Carriers Carriers `yaml:"carriers"`
+			Carriers config.Carriers `yaml:"carriers"`
 		}
 		if err := yaml.Unmarshal([]byte(yamlContent), &cfg); err != nil {
 			t.Fatalf("Unmarshal error: %v", err)
@@ -741,7 +807,9 @@ carriers:
 }
 
 func TestCarriers_UnmarshalYAML_DirectInvalidType(t *testing.T) {
-	var carriers Carriers
+	t.Parallel()
+
+	var carriers config.Carriers
 	scalarNode := &yaml.Node{Kind: yaml.ScalarNode, Value: "invalid"}
 	err := carriers.UnmarshalYAML(scalarNode)
 	if err == nil {
@@ -753,15 +821,19 @@ func TestCarriers_UnmarshalYAML_DirectInvalidType(t *testing.T) {
 }
 
 func TestCarriers_MarshalYAML(t *testing.T) {
+	t.Parallel()
+
 	t.Run("marshal simple form", func(t *testing.T) {
-		carriers := Carriers{
-			Custom: []CarrierDef{{Package: "pkg", Type: "T"}},
+		t.Parallel()
+
+		carriers := config.Carriers{
+			Custom: []config.CarrierDef{{Package: "pkg", Type: "T"}},
 		}
 		result, err := carriers.MarshalYAML()
 		if err != nil {
 			t.Fatalf("MarshalYAML() error = %v", err)
 		}
-		arr, ok := result.([]CarrierDef)
+		arr, ok := result.([]config.CarrierDef)
 		if !ok {
 			t.Errorf("MarshalYAML() = %T, want []CarrierDef", result)
 		}
@@ -771,9 +843,11 @@ func TestCarriers_MarshalYAML(t *testing.T) {
 	})
 
 	t.Run("marshal extended form with default set", func(t *testing.T) {
+		t.Parallel()
+
 		defaultVal := false
-		carriers := Carriers{
-			Custom:  []CarrierDef{{Package: "pkg", Type: "T"}},
+		carriers := config.Carriers{
+			Custom:  []config.CarrierDef{{Package: "pkg", Type: "T"}},
 			Default: &defaultVal,
 		}
 		result, err := carriers.MarshalYAML()
@@ -791,6 +865,8 @@ func TestCarriers_MarshalYAML(t *testing.T) {
 }
 
 func TestLoadConfig_CarriersExtendedForm(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -808,7 +884,7 @@ carriers:
 		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -822,7 +898,11 @@ carriers:
 }
 
 func TestLoadConfig_DefaultValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("sets default function types when empty", func(t *testing.T) {
+		t.Parallel()
+
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -836,7 +916,7 @@ packages:
 			t.Fatalf("failed to write config file: %v", err)
 		}
 
-		cfg, err := LoadConfig(configPath)
+		cfg, err := config.LoadConfig(configPath)
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
@@ -848,10 +928,10 @@ packages:
 		hasFunction := false
 		hasMethod := false
 		for _, ft := range cfg.Functions.Types {
-			if ft == FuncTypeFunction {
+			if ft == config.FuncTypeFunction {
 				hasFunction = true
 			}
-			if ft == FuncTypeMethod {
+			if ft == config.FuncTypeMethod {
 				hasMethod = true
 			}
 		}
@@ -861,6 +941,8 @@ packages:
 	})
 
 	t.Run("sets default function scopes when empty", func(t *testing.T) {
+		t.Parallel()
+
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -874,7 +956,7 @@ packages:
 			t.Fatalf("failed to write config file: %v", err)
 		}
 
-		cfg, err := LoadConfig(configPath)
+		cfg, err := config.LoadConfig(configPath)
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
@@ -886,10 +968,10 @@ packages:
 		hasExported := false
 		hasUnexported := false
 		for _, fs := range cfg.Functions.Scopes {
-			if fs == FuncScopeExported {
+			if fs == config.FuncScopeExported {
 				hasExported = true
 			}
-			if fs == FuncScopeUnexported {
+			if fs == config.FuncScopeUnexported {
 				hasUnexported = true
 			}
 		}
@@ -899,6 +981,8 @@ packages:
 	})
 
 	t.Run("preserves explicit types when specified", func(t *testing.T) {
+		t.Parallel()
+
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -914,7 +998,7 @@ functions:
 			t.Fatalf("failed to write config file: %v", err)
 		}
 
-		cfg, err := LoadConfig(configPath)
+		cfg, err := config.LoadConfig(configPath)
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
@@ -923,12 +1007,14 @@ functions:
 		if len(cfg.Functions.Types) != 1 {
 			t.Errorf("Functions.Types = %v, want 1 element", cfg.Functions.Types)
 		}
-		if cfg.Functions.Types[0] != FuncTypeFunction {
+		if cfg.Functions.Types[0] != config.FuncTypeFunction {
 			t.Errorf("Functions.Types[0] = %v, want 'function'", cfg.Functions.Types[0])
 		}
 	})
 
 	t.Run("preserves explicit scopes when specified", func(t *testing.T) {
+		t.Parallel()
+
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "ctxweaver.yaml")
 
@@ -944,7 +1030,7 @@ functions:
 			t.Fatalf("failed to write config file: %v", err)
 		}
 
-		cfg, err := LoadConfig(configPath)
+		cfg, err := config.LoadConfig(configPath)
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
@@ -953,7 +1039,7 @@ functions:
 		if len(cfg.Functions.Scopes) != 1 {
 			t.Errorf("Functions.Scopes = %v, want 1 element", cfg.Functions.Scopes)
 		}
-		if cfg.Functions.Scopes[0] != FuncScopeExported {
+		if cfg.Functions.Scopes[0] != config.FuncScopeExported {
 			t.Errorf("Functions.Scopes[0] = %v, want 'exported'", cfg.Functions.Scopes[0])
 		}
 	})
