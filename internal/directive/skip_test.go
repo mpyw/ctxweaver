@@ -1,11 +1,9 @@
-package directive_test
+package directive
 
 import (
 	"testing"
 
 	"github.com/dave/dst"
-
-	"github.com/mpyw/ctxweaver/internal/directive"
 )
 
 func TestIsSkipComment(t *testing.T) {
@@ -65,7 +63,7 @@ func TestIsSkipComment(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := directive.IsSkipComment(tt.input)
+			got := isSkipComment(tt.input)
 			if got != tt.want {
 				t.Errorf("IsSkipComment(%q) = %v, want %v", tt.input, got, tt.want)
 			}
@@ -124,7 +122,7 @@ func TestHasSkipDirective(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := directive.HasSkipDirective(tt.decs)
+			got := HasSkipDirective(tt.decs)
 			if got != tt.want {
 				t.Errorf("HasSkipDirective() = %v, want %v", got, tt.want)
 			}
@@ -222,7 +220,7 @@ func TestHasStmtSkipDirective(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got := directive.HasStmtSkipDirective(tt.stmt)
+			got := HasStmtSkipDirective(tt.stmt)
 			if got != tt.want {
 				t.Errorf("HasStmtSkipDirective() = %v, want %v", got, tt.want)
 			}
