@@ -1,4 +1,4 @@
-package dstutil_test
+package dstutil
 
 import (
 	"go/ast"
@@ -10,8 +10,6 @@ import (
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
-
-	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 
 // stmtsToStrings converts DST statements to their string representations.
@@ -99,7 +97,7 @@ defer seg.End()`,
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stmts, err := dstutil.ParseStatements(tt.input)
+			stmts, err := ParseStatements(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseStatements() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -127,7 +125,7 @@ func TestInsertStatements(t *testing.T) {
 		}
 
 		stmt := `defer trace(ctx)`
-		if !dstutil.InsertStatements(body, stmt) {
+		if !InsertStatements(body, stmt) {
 			t.Error("InsertStatements() returned false")
 		}
 
@@ -156,7 +154,7 @@ func TestInsertStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "test.Foo")
 defer span.End()`
-		if !dstutil.InsertStatements(body, stmt) {
+		if !InsertStatements(body, stmt) {
 			t.Error("InsertStatements() returned false")
 		}
 
@@ -192,7 +190,7 @@ func TestUpdateStatements(t *testing.T) {
 		}
 
 		stmt := `defer apm.StartSegment(ctx, "new.Func").End()`
-		if !dstutil.UpdateStatements(body, 0, 1, stmt) {
+		if !UpdateStatements(body, 0, 1, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -223,7 +221,7 @@ func TestUpdateStatements(t *testing.T) {
 
 		stmt := `ctx, span := otel.Tracer("").Start(ctx, "new.Func")
 defer span.End()`
-		if !dstutil.UpdateStatements(body, 0, 2, stmt) {
+		if !UpdateStatements(body, 0, 2, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -257,7 +255,7 @@ defer span.End()`
 		}
 
 		stmt := `x := 100`
-		if !dstutil.UpdateStatements(body, 0, 3, stmt) {
+		if !UpdateStatements(body, 0, 3, stmt) {
 			t.Error("UpdateStatements() returned false")
 		}
 
@@ -352,7 +350,7 @@ func TestRemoveStatements(t *testing.T) {
 				body.List[i] = &dst.ExprStmt{X: &dst.Ident{Name: "stmt"}}
 			}
 
-			got := dstutil.RemoveStatements(body, tt.removeIdx, tt.removeCount)
+			got := RemoveStatements(body, tt.removeIdx, tt.removeCount)
 			if got != tt.wantResult {
 				t.Errorf("RemoveStatements() = %v, want %v", got, tt.wantResult)
 			}

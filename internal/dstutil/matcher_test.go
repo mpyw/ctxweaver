@@ -1,11 +1,9 @@
-package dstutil_test
+package dstutil
 
 import (
 	"testing"
 
 	"github.com/dave/dst"
-
-	"github.com/mpyw/ctxweaver/internal/dstutil"
 )
 
 func TestMatchesSkeleton(t *testing.T) {
@@ -147,16 +145,16 @@ func TestMatchesSkeleton(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stmtsA, err := dstutil.ParseStatements(tt.a)
+			stmtsA, err := ParseStatements(tt.a)
 			if err != nil {
 				t.Fatalf("failed to parse a: %v", err)
 			}
-			stmtsB, err := dstutil.ParseStatements(tt.b)
+			stmtsB, err := ParseStatements(tt.b)
 			if err != nil {
 				t.Fatalf("failed to parse b: %v", err)
 			}
 
-			got := dstutil.MatchesSkeleton(stmtsA[0], stmtsB[0])
+			got := MatchesSkeleton(stmtsA[0], stmtsB[0])
 			if got != tt.want {
 				t.Errorf("MatchesSkeleton() = %v, want %v", got, tt.want)
 			}
@@ -167,7 +165,7 @@ func TestMatchesSkeleton(t *testing.T) {
 func TestMatchesSkeleton_NilHandling(t *testing.T) {
 	t.Parallel()
 
-	stmt, _ := dstutil.ParseStatements(`x := 1`)
+	stmt, _ := ParseStatements(`x := 1`)
 
 	t.Run("both nil", func(t *testing.T) {
 		t.Parallel()
@@ -191,9 +189,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("different token in assign", func(t *testing.T) {
 		t.Parallel()
 
-		a, _ := dstutil.ParseStatements(`x := 1`)
-		b, _ := dstutil.ParseStatements(`x = 1`)
-		if dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`x := 1`)
+		b, _ := ParseStatements(`x = 1`)
+		if MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected different assignment tokens to not match")
 		}
 	})
@@ -201,9 +199,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("func literal", func(t *testing.T) {
 		t.Parallel()
 
-		a, _ := dstutil.ParseStatements(`f := func() {}`)
-		b, _ := dstutil.ParseStatements(`f := func() {}`)
-		if !dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`f := func() {}`)
+		b, _ := ParseStatements(`f := func() {}`)
+		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected func literals to match")
 		}
 	})
@@ -211,9 +209,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("func literal with params", func(t *testing.T) {
 		t.Parallel()
 
-		a, _ := dstutil.ParseStatements(`f := func(x int) int { return x }`)
-		b, _ := dstutil.ParseStatements(`f := func(x int) int { return x }`)
-		if !dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`f := func(x int) int { return x }`)
+		b, _ := ParseStatements(`f := func(x int) int { return x }`)
+		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected func literals with same signature to match")
 		}
 	})
@@ -221,9 +219,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("func literal different param count", func(t *testing.T) {
 		t.Parallel()
 
-		a, _ := dstutil.ParseStatements(`f := func(x int) {}`)
-		b, _ := dstutil.ParseStatements(`f := func() {}`)
-		if dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`f := func(x int) {}`)
+		b, _ := ParseStatements(`f := func() {}`)
+		if MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected func literals with different param count to not match")
 		}
 	})
@@ -232,9 +230,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		// switch statements with same structure but different literal values
-		a, _ := dstutil.ParseStatements(`switch x { case 1: println("a") }`)
-		b, _ := dstutil.ParseStatements(`switch x { case 2: println("b") }`)
-		if !dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`switch x { case 1: println("a") }`)
+		b, _ := ParseStatements(`switch x { case 2: println("b") }`)
+		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected switch statements to match")
 		}
 	})
@@ -243,9 +241,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 		t.Parallel()
 
 		// if statements with same structure
-		a, _ := dstutil.ParseStatements(`if x { println("a") }`)
-		b, _ := dstutil.ParseStatements(`if x { println("b") }`)
-		if !dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`if x { println("a") }`)
+		b, _ := ParseStatements(`if x { println("b") }`)
+		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected if statements to match")
 		}
 	})
@@ -253,9 +251,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("if with else", func(t *testing.T) {
 		t.Parallel()
 
-		a, _ := dstutil.ParseStatements(`if x { println("a") } else { println("b") }`)
-		b, _ := dstutil.ParseStatements(`if x { println("c") } else { println("d") }`)
-		if !dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`if x { println("a") } else { println("b") }`)
+		b, _ := ParseStatements(`if x { println("c") } else { println("d") }`)
+		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected if-else statements to match")
 		}
 	})
@@ -263,9 +261,9 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 	t.Run("key value expr", func(t *testing.T) {
 		t.Parallel()
 
-		a, _ := dstutil.ParseStatements(`m := map[string]int{"a": 1}`)
-		b, _ := dstutil.ParseStatements(`m := map[string]int{"b": 2}`)
-		if !dstutil.MatchesSkeleton(a[0], b[0]) {
+		a, _ := ParseStatements(`m := map[string]int{"a": 1}`)
+		b, _ := ParseStatements(`m := map[string]int{"b": 2}`)
+		if !MatchesSkeleton(a[0], b[0]) {
 			t.Error("expected map literals to match")
 		}
 	})
@@ -274,12 +272,12 @@ func TestCompareNodes_EdgeCases(t *testing.T) {
 func TestCompareFieldLists(t *testing.T) {
 	t.Parallel()
 
-	c := dstutil.NewComparator()
+	c := NewComparator()
 
 	t.Run("both nil", func(t *testing.T) {
 		t.Parallel()
 
-		if !dstutil.CompareFieldLists(nil, nil, "test", false, c) {
+		if !compareFieldLists(nil, nil, "test", false, c) {
 			t.Error("expected nil == nil")
 		}
 	})
@@ -288,10 +286,10 @@ func TestCompareFieldLists(t *testing.T) {
 		t.Parallel()
 
 		fl := &dst.FieldList{List: []*dst.Field{}}
-		if dstutil.CompareFieldLists(nil, fl, "test", false, c) {
+		if compareFieldLists(nil, fl, "test", false, c) {
 			t.Error("expected nil != non-nil")
 		}
-		if dstutil.CompareFieldLists(fl, nil, "test", false, c) {
+		if compareFieldLists(fl, nil, "test", false, c) {
 			t.Error("expected non-nil != nil")
 		}
 	})
@@ -301,7 +299,7 @@ func TestCompareFieldLists(t *testing.T) {
 
 		a := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
 		b := &dst.FieldList{List: []*dst.Field{}}
-		if dstutil.CompareFieldLists(a, b, "test", false, c) {
+		if compareFieldLists(a, b, "test", false, c) {
 			t.Error("expected different lengths to not match")
 		}
 	})
@@ -311,7 +309,7 @@ func TestCompareFieldLists(t *testing.T) {
 
 		a := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
 		b := &dst.FieldList{List: []*dst.Field{{Type: &dst.Ident{Name: "int"}}}}
-		if !dstutil.CompareFieldLists(a, b, "test", false, c) {
+		if !compareFieldLists(a, b, "test", false, c) {
 			t.Error("expected same types to match")
 		}
 	})
@@ -386,16 +384,16 @@ func TestMatchesExact(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stmtsA, err := dstutil.ParseStatements(tt.a)
+			stmtsA, err := ParseStatements(tt.a)
 			if err != nil {
 				t.Fatalf("failed to parse a: %v", err)
 			}
-			stmtsB, err := dstutil.ParseStatements(tt.b)
+			stmtsB, err := ParseStatements(tt.b)
 			if err != nil {
 				t.Fatalf("failed to parse b: %v", err)
 			}
 
-			got := dstutil.MatchesExact(stmtsA[0], stmtsB[0])
+			got := MatchesExact(stmtsA[0], stmtsB[0])
 			if got != tt.want {
 				t.Errorf("MatchesExact() = %v, want %v", got, tt.want)
 			}
@@ -430,17 +428,17 @@ func TestMatchesExact_SkeletonPassesButExactFails(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stmtsA, err := dstutil.ParseStatements(tt.a)
+			stmtsA, err := ParseStatements(tt.a)
 			if err != nil {
 				t.Fatalf("failed to parse a: %v", err)
 			}
-			stmtsB, err := dstutil.ParseStatements(tt.b)
+			stmtsB, err := ParseStatements(tt.b)
 			if err != nil {
 				t.Fatalf("failed to parse b: %v", err)
 			}
 
-			skeleton := dstutil.MatchesSkeleton(stmtsA[0], stmtsB[0])
-			exact := dstutil.MatchesExact(stmtsA[0], stmtsB[0])
+			skeleton := MatchesSkeleton(stmtsA[0], stmtsB[0])
+			exact := MatchesExact(stmtsA[0], stmtsB[0])
 
 			if !skeleton {
 				t.Error("expected MatchesSkeleton() = true")
@@ -457,7 +455,7 @@ func TestCompareNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 
 	// Test the special case: SelectorExpr matches Ident with Path set
 	// This happens when NewDecoratorFromPackage resolves `pkg.Func` to `Func` with Path="pkg"
-	c := dstutil.NewComparator()
+	c := NewComparator()
 
 	t.Run("SelectorExpr matches Ident with Path (selA.Sel.Name == identB.Name)", func(t *testing.T) {
 		t.Parallel()
