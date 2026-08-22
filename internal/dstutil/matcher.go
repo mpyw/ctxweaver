@@ -26,37 +26,39 @@ func MatchesExact(a, b dst.Stmt) bool {
 }
 
 // ============================================================================
-// Visitor Pattern: NodeComparer interface and Comparator
+// Visitor Pattern: NodeComparer and Comparator
 // ============================================================================
 
-// NodeComparer defines the interface for comparing specific DST node types.
-// Implementations handle the comparison logic for a single node type,
-// delegating child node comparisons back to the Comparator.
-type NodeComparer interface {
-	// Compare compares two nodes of the same type.
-	// The nodes are guaranteed to be of the type this comparer handles.
-	// Use c.Compare for recursive child comparisons.
-	Compare(a, b dst.Node, path string, exact bool, c *Comparator) bool
-}
+// NodeComparer compares two DST nodes of the concrete type T.
+// Implementations receive already-narrowed nodes and delegate child
+// comparisons back to the Comparator via c.Compare.
+type NodeComparer[T dst.Node] func(a, b T, path string, exact bool, c *Comparator) bool
+
+// erasedComparer is the type-erased form of a NodeComparer stored in the registry.
+type erasedComparer = func(a, b dst.Node, path string, exact bool, c *Comparator) bool
 
 // Comparator manages NodeComparer implementations and performs comparisons.
 // It acts as a registry for node-specific comparers and handles dispatch.
 type Comparator struct {
-	comparers map[reflect.Type]NodeComparer
+	comparers map[reflect.Type]erasedComparer
 }
 
 // NewComparator creates a new Comparator with the default set of comparers.
 func NewComparator() *Comparator {
 	c := &Comparator{
-		comparers: make(map[reflect.Type]NodeComparer),
+		comparers: make(map[reflect.Type]erasedComparer),
 	}
 	c.registerDefaults()
 	return c
 }
 
-// Register adds a NodeComparer for a specific node type.
-func (c *Comparator) Register(nodeType reflect.Type, comparer NodeComparer) {
-	c.comparers[nodeType] = comparer
+// Register adds a NodeComparer for the node type T.
+// The node type is inferred from cmp, so callers state each type exactly once
+// and comparers never assert their own argument types.
+func (c *Comparator) Register[T dst.Node](cmp NodeComparer[T]) {
+	c.comparers[reflect.TypeFor[T]()] = func(a, b dst.Node, path string, exact bool, comparator *Comparator) bool {
+		return cmp(a.(T), b.(T), path, exact, comparator)
+	}
 }
 
 // Compare compares two DST nodes using the registered comparers.
@@ -74,9 +76,8 @@ func (c *Comparator) Compare(a, b dst.Node, path string, exact bool) bool {
 		return c.importEquivalent(a, b)
 	}
 
-	nodeType := reflect.TypeOf(a)
-	if comparer, ok := c.comparers[nodeType]; ok {
-		return comparer.Compare(a, b, path, exact, c)
+	if cmp, ok := c.comparers[reflect.TypeOf(a)]; ok {
+		return cmp(a, b, path, exact, c)
 	}
 
 	// Fallback: unsupported node types pass by default
@@ -103,30 +104,30 @@ func (c *Comparator) importEquivalent(a, b dst.Node) bool {
 // registerDefaults registers all built-in node comparers.
 func (c *Comparator) registerDefaults() {
 	// Statements
-	c.Register(reflect.TypeOf((*dst.DeferStmt)(nil)), &deferStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.ExprStmt)(nil)), &exprStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.IfStmt)(nil)), &ifStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.SwitchStmt)(nil)), &switchStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.BlockStmt)(nil)), &blockStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.AssignStmt)(nil)), &assignStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.ReturnStmt)(nil)), &returnStmtComparer{})
-	c.Register(reflect.TypeOf((*dst.CaseClause)(nil)), &caseClauseComparer{})
+	c.Register(compareDeferStmt)
+	c.Register(compareExprStmt)
+	c.Register(compareIfStmt)
+	c.Register(compareSwitchStmt)
+	c.Register(compareBlockStmt)
+	c.Register(compareAssignStmt)
+	c.Register(compareReturnStmt)
+	c.Register(compareCaseClause)
 
 	// Expressions
-	c.Register(reflect.TypeOf((*dst.CallExpr)(nil)), &callExprComparer{})
-	c.Register(reflect.TypeOf((*dst.SelectorExpr)(nil)), &selectorExprComparer{})
-	c.Register(reflect.TypeOf((*dst.Ident)(nil)), &identComparer{})
-	c.Register(reflect.TypeOf((*dst.BasicLit)(nil)), &basicLitComparer{})
-	c.Register(reflect.TypeOf((*dst.UnaryExpr)(nil)), &unaryExprComparer{})
-	c.Register(reflect.TypeOf((*dst.BinaryExpr)(nil)), &binaryExprComparer{})
-	c.Register(reflect.TypeOf((*dst.ParenExpr)(nil)), &parenExprComparer{})
-	c.Register(reflect.TypeOf((*dst.IndexExpr)(nil)), &indexExprComparer{})
-	c.Register(reflect.TypeOf((*dst.FuncLit)(nil)), &funcLitComparer{})
-	c.Register(reflect.TypeOf((*dst.FuncType)(nil)), &funcTypeComparer{})
-	c.Register(reflect.TypeOf((*dst.CompositeLit)(nil)), &compositeLitComparer{})
-	c.Register(reflect.TypeOf((*dst.KeyValueExpr)(nil)), &keyValueExprComparer{})
-	c.Register(reflect.TypeOf((*dst.StarExpr)(nil)), &starExprComparer{})
-	c.Register(reflect.TypeOf((*dst.TypeAssertExpr)(nil)), &typeAssertExprComparer{})
+	c.Register(compareCallExpr)
+	c.Register(compareSelectorExpr)
+	c.Register(compareIdent)
+	c.Register(compareBasicLit)
+	c.Register(compareUnaryExpr)
+	c.Register(compareBinaryExpr)
+	c.Register(compareParenExpr)
+	c.Register(compareIndexExpr)
+	c.Register(compareFuncLit)
+	c.Register(compareFuncType)
+	c.Register(compareCompositeLit)
+	c.Register(compareKeyValueExpr)
+	c.Register(compareStarExpr)
+	c.Register(compareTypeAssertExpr)
 }
 
 // defaultComparator is the singleton instance used by public API.
@@ -135,6 +136,19 @@ var defaultComparator = NewComparator()
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+// compareNodeLists compares two slices of nodes element-wise.
+func compareNodeLists[T dst.Node](a, b []T, path string, exact bool, c *Comparator) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !c.Compare(a[i], b[i], fmt.Sprintf("%s[%d]", path, i), exact) {
+			return false
+		}
+	}
+	return true
+}
 
 // compareFieldLists compares two field lists for structural equality.
 func compareFieldLists(a, b *dst.FieldList, path string, exact bool, c *Comparator) bool {
@@ -148,15 +162,10 @@ func compareFieldLists(a, b *dst.FieldList, path string, exact bool, c *Comparat
 		return false
 	}
 	for i := range a.List {
-		if !compareFields(a.List[i], b.List[i], fmt.Sprintf("%s[%d]", path, i), exact, c) {
+		// Compare types only (names are dynamic)
+		if !c.Compare(a.List[i].Type, b.List[i].Type, fmt.Sprintf("%s[%d].Type", path, i), exact) {
 			return false
 		}
 	}
 	return true
-}
-
-// compareFields compares two fields for structural equality.
-func compareFields(a, b *dst.Field, path string, exact bool, c *Comparator) bool {
-	// Compare types only (names are dynamic)
-	return c.Compare(a.Type, b.Type, path+".Type", exact)
 }
