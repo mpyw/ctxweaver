@@ -1,4 +1,4 @@
-// Package internal provides shared internal utilities.
+// Package internal provides shared utilities for ctxweaver.
 package internal
 
 // Must panics if err is not nil, otherwise returns val.

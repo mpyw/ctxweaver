@@ -1,4 +1,3 @@
-// Package internal provides shared utilities for ctxweaver.
 package internal
 
 import (
