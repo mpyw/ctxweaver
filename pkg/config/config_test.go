@@ -845,10 +845,9 @@ func TestCarriers_MarshalYAML(t *testing.T) {
 	t.Run("marshal extended form with default set", func(t *testing.T) {
 		t.Parallel()
 
-		defaultVal := false
 		carriers := config.Carriers{
 			Custom:  []config.CarrierDef{{Package: "pkg", Type: "T"}},
-			Default: &defaultVal,
+			Default: new(false),
 		}
 		result, err := carriers.MarshalYAML()
 		if err != nil {

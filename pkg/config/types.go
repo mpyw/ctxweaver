@@ -157,7 +157,7 @@ type Packages struct {
 	// Patterns are the package patterns to process (e.g., "./...")
 	Patterns []string `yaml:"patterns" json:"patterns"`
 	// Regexps for filtering packages by import path
-	Regexps Regexps `yaml:"regexps" json:"regexps,omitempty"`
+	Regexps Regexps `yaml:"regexps" json:"regexps,omitzero"`
 }
 
 // FuncType represents function type for filtering.
@@ -183,7 +183,7 @@ type Functions struct {
 	// Scopes filters by visibility (exported, unexported). Default: both.
 	Scopes []FuncScope `yaml:"scopes" json:"scopes,omitempty"`
 	// Regexps for filtering functions by name
-	Regexps Regexps `yaml:"regexps" json:"regexps,omitempty"`
+	Regexps Regexps `yaml:"regexps" json:"regexps,omitzero"`
 }
 
 // Config represents the user configuration file.
@@ -193,15 +193,15 @@ type Config struct {
 	// Imports are the imports to add when the template is inserted
 	Imports []string `yaml:"imports" json:"imports,omitempty"`
 	// Carriers defines context carrier configuration (custom carriers and default toggle)
-	Carriers Carriers `yaml:"carriers" json:"carriers,omitempty"`
+	Carriers Carriers `yaml:"carriers" json:"carriers,omitzero"`
 	// Packages defines package filtering options
 	Packages Packages `yaml:"packages" json:"packages"`
 	// Functions defines function filtering options
-	Functions Functions `yaml:"functions" json:"functions,omitempty"`
+	Functions Functions `yaml:"functions" json:"functions,omitzero"`
 	// Test indicates whether to process test files
 	Test bool `yaml:"test" json:"test,omitempty"`
 	// Hooks are shell commands to run before and after processing
-	Hooks Hooks `yaml:"hooks" json:"hooks,omitempty"`
+	Hooks Hooks `yaml:"hooks" json:"hooks,omitzero"`
 }
 
 // SetDefaults sets default values for optional fields.

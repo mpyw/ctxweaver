@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"go/token"
 
 	"github.com/dave/dst"
 
@@ -25,17 +26,6 @@ func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
 	return decl.Type.Params.List[0]
 }
 
-// isExportedFunc checks if a function name is exported (starts with uppercase).
-// The empty name check is defensive: Go parser rejects functions without names,
-// so this branch is unreachable in normal operation.
-func isExportedFunc(name string) bool {
-	if name == "" {
-		return false
-	}
-	r := rune(name[0])
-	return r >= 'A' && r <= 'Z'
-}
-
 // shouldSkipDecl checks if a function declaration should be skipped.
 func shouldSkipDecl(decl *dst.FuncDecl) bool {
 	if directive.HasSkipDirective(decl.Decorations()) {
@@ -53,8 +43,8 @@ func (p *Processor) matchesFuncFilter(decl *dst.FuncDecl) bool {
 		return true
 	}
 	isMethod := decl.Recv != nil && len(decl.Recv.List) > 0
-	isExported := isExportedFunc(decl.Name.Name)
-	return p.funcFilter.Match(decl.Name.Name, isMethod, isExported)
+	// token.IsExported handles non-ASCII uppercase letters, unlike a byte-wise check.
+	return p.funcFilter.Match(decl.Name.Name, isMethod, token.IsExported(decl.Name.Name))
 }
 
 // tryMatchCarrier attempts to match the first parameter against registered carriers.

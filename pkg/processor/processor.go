@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 
 	"github.com/mpyw/ctxweaver/internal"
 	"github.com/mpyw/ctxweaver/pkg/config"
@@ -19,8 +20,16 @@ type CompiledRegexps struct {
 
 // CompileRegexps compiles regex patterns from config.
 func CompileRegexps(r config.Regexps) CompiledRegexps {
-	var result CompiledRegexps
-	for _, pattern := range r.Only {
+	return CompiledRegexps{
+		Only: compilePatterns(r.Only),
+		Omit: compilePatterns(r.Omit),
+	}
+}
+
+// compilePatterns compiles each pattern, warning about and dropping invalid ones.
+func compilePatterns(patterns []string) []*regexp.Regexp {
+	var compiled []*regexp.Regexp
+	for _, pattern := range patterns {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%swarning:%s invalid regex pattern %q: %v\n",
@@ -29,45 +38,21 @@ func CompileRegexps(r config.Regexps) CompiledRegexps {
 				pattern, err)
 			continue
 		}
-		result.Only = append(result.Only, re)
+		compiled = append(compiled, re)
 	}
-	for _, pattern := range r.Omit {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%swarning:%s invalid regex pattern %q: %v\n",
-				internal.StderrColor(internal.ColorYellow),
-				internal.StderrColor(internal.ColorReset),
-				pattern, err)
-			continue
-		}
-		result.Omit = append(result.Omit, re)
-	}
-	return result
+	return compiled
 }
 
 // Match checks if a string matches the filter criteria.
 // Returns true if the string should be included.
 func (r *CompiledRegexps) Match(s string) bool {
+	matches := func(re *regexp.Regexp) bool { return re.MatchString(s) }
 	// If only patterns are specified, the string must match at least one
-	if len(r.Only) > 0 {
-		matched := false
-		for _, re := range r.Only {
-			if re.MatchString(s) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+	if len(r.Only) > 0 && !slices.ContainsFunc(r.Only, matches) {
+		return false
 	}
-	// Check omit patterns - if any matches, exclude
-	for _, re := range r.Omit {
-		if re.MatchString(s) {
-			return false
-		}
-	}
-	return true
+	// Any omit pattern that matches excludes the string
+	return !slices.ContainsFunc(r.Omit, matches)
 }
 
 // FuncFilter holds compiled function filter settings.
@@ -89,43 +74,21 @@ func NewFuncFilter(f config.Functions) *FuncFilter {
 // Match checks if a function should be processed.
 func (f *FuncFilter) Match(funcName string, isMethod, isExported bool) bool {
 	// Check types filter
-	if len(f.Types) > 0 {
-		var funcType config.FuncType
-		if isMethod {
-			funcType = config.FuncTypeMethod
-		} else {
-			funcType = config.FuncTypeFunction
-		}
-		matched := false
-		for _, t := range f.Types {
-			if t == funcType {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+	funcType := config.FuncTypeFunction
+	if isMethod {
+		funcType = config.FuncTypeMethod
+	}
+	if len(f.Types) > 0 && !slices.Contains(f.Types, funcType) {
+		return false
 	}
 
 	// Check scopes filter
-	if len(f.Scopes) > 0 {
-		var scope config.FuncScope
-		if isExported {
-			scope = config.FuncScopeExported
-		} else {
-			scope = config.FuncScopeUnexported
-		}
-		matched := false
-		for _, s := range f.Scopes {
-			if s == scope {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+	scope := config.FuncScopeUnexported
+	if isExported {
+		scope = config.FuncScopeExported
+	}
+	if len(f.Scopes) > 0 && !slices.Contains(f.Scopes, scope) {
+		return false
 	}
 
 	// Check regexps filter

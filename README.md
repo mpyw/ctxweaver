@@ -39,6 +39,9 @@ The inserted statement is fully customizable via Go templates.
 
 ## Installation & Usage
 
+> [!IMPORTANT]
+> ctxweaver requires **Go 1.27 or later** to build. With an older toolchain installed, the `go` command downloads a matching toolchain automatically unless `GOTOOLCHAIN=local` is set.
+
 ### Using [`go install`](https://pkg.go.dev/cmd/go#hdr-Compile_and_install_packages_and_dependencies)
 
 ```bash

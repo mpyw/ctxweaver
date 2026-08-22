@@ -41,9 +41,17 @@ func TestIsSkipComment(t *testing.T) {
 			input: "// some ctxweaver:skip comment",
 			want:  false,
 		},
-		"partial match": {
+		"different directive name sharing the skip prefix": {
 			input: "//ctxweaver:skipme",
-			want:  true, // HasPrefix allows this
+			want:  false, // the directive name must be exactly "skip"
+		},
+		"skip name in a different tool namespace": {
+			input: "//other:skip",
+			want:  false,
+		},
+		"tool name without a directive name": {
+			input: "//ctxweaver:",
+			want:  false,
 		},
 		"empty comment": {
 			input: "//",
