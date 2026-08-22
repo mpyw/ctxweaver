@@ -1,4 +1,4 @@
-.PHONY: all build test lint fmt clean install
+.PHONY: all build test lint fmt modernize clean install
 
 # Default target
 all: lint test build
@@ -23,6 +23,10 @@ cover:
 # Run linter
 lint:
 	golangci-lint run
+
+# Apply Go modernizers (https://pkg.go.dev/cmd/go#hdr-Update_packages_to_use_new_APIs)
+modernize:
+	go fix ./...
 
 # Format code
 fmt:
