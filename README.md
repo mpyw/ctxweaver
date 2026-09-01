@@ -39,15 +39,24 @@ The inserted statement is fully customizable via Go templates.
 
 ## Installation & Usage
 
-> [!IMPORTANT]
-> ctxweaver requires **Go 1.27 or later** to build. With an older toolchain installed, the `go` command downloads a matching toolchain automatically unless `GOTOOLCHAIN=local` is set.
+### <a href="https://mise.jdx.dev/"><img src="https://mise.jdx.dev/logo.svg" height="28" alt=""></a> Using [mise](https://mise.jdx.dev/) (macOS/Linux/Windows)
 
-### Using [`go install`](https://pkg.go.dev/cmd/go#hdr-Compile_and_install_packages_and_dependencies)
+**Recommended.** ctxweaver is installable directly from GitHub Releases via mise's `github` backend — no extra registry required, and no Go toolchain needed because the binaries are prebuilt:
 
 ```bash
-go install github.com/mpyw/ctxweaver/cmd/ctxweaver@latest
+mise use -g "github:mpyw/ctxweaver"
 ctxweaver ./...
 ```
+
+Or pin it per project in `mise.toml`:
+
+```toml
+[tools]
+"github:mpyw/ctxweaver" = "latest"
+```
+
+> [!IMPORTANT]
+> The `go`-based methods below build ctxweaver from source, which requires **Go 1.27 or later**. With an older toolchain installed, the `go` command downloads a matching toolchain automatically unless `GOTOOLCHAIN=local` is set.
 
 ### Using [`go tool`](https://pkg.go.dev/cmd/go#hdr-Run_specified_go_tool) (Go 1.24+)
 
@@ -59,6 +68,13 @@ go get -tool github.com/mpyw/ctxweaver/cmd/ctxweaver@latest
 go tool ctxweaver ./...
 ```
 
+### Using [`go install`](https://pkg.go.dev/cmd/go#hdr-Compile_and_install_packages_and_dependencies)
+
+```bash
+go install github.com/mpyw/ctxweaver/cmd/ctxweaver@latest
+ctxweaver ./...
+```
+
 ### Using [`go run`](https://pkg.go.dev/cmd/go#hdr-Compile_and_run_Go_program)
 
 ```bash
@@ -66,7 +82,33 @@ go run github.com/mpyw/ctxweaver/cmd/ctxweaver@latest ./...
 ```
 
 > [!CAUTION]
-> To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.6.3`).
+> To prevent supply chain attacks, pin to a specific version tag instead of `@latest` in CI/CD pipelines (e.g., `@v0.8.0`).
+
+<details>
+<summary><a href="https://curl.se/"><img src="https://cdn.simpleicons.org/curl" height="20" alt=""></a> Downloading the tarball directly (macOS/Linux/Windows)</summary>
+
+No package manager? Grab the archive for your platform from [GitHub Releases](https://github.com/mpyw/ctxweaver/releases):
+
+```bash
+export VERSION=0.0.0
+export OS=linux    # or darwin
+export ARCH=amd64  # or arm64
+export BASE_URL="https://github.com/mpyw/ctxweaver/releases/download/v${VERSION}"
+
+# Download the archive and the release's checksum list
+curl -LO "${BASE_URL}/ctxweaver_${VERSION}_${OS}_${ARCH}.tar.gz"
+curl -LO "${BASE_URL}/checksums.txt"
+
+# Verify before installing (use `shasum -a 256 -c` on macOS)
+sha256sum --ignore-missing -c checksums.txt
+
+tar xzf "ctxweaver_${VERSION}_${OS}_${ARCH}.tar.gz"
+sudo mv ctxweaver /usr/local/bin/
+```
+
+On Windows, download `ctxweaver_${VERSION}_windows_${ARCH}.zip` and extract `ctxweaver.exe` somewhere on your `PATH`.
+
+</details>
 
 ## Configuration
 
