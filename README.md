@@ -56,9 +56,9 @@ Or pin it per project in `mise.toml`:
 ```
 
 > [!IMPORTANT]
-> The `go`-based methods below build ctxweaver from source, which requires **Go 1.27 or later**. With an older toolchain installed, the `go` command downloads a matching toolchain automatically unless `GOTOOLCHAIN=local` is set.
+> The `go`-based methods below build ctxweaver from source, which requires **Go 1.27 or later**. With an older toolchain installed, the `go` command downloads a matching toolchain automatically unless `GOTOOLCHAIN=local` is set. `go tool` also needs Go 1.24+ on `PATH`, which is where tool directives were introduced.
 
-### Using [`go tool`](https://pkg.go.dev/cmd/go#hdr-Run_specified_go_tool) (Go 1.24+)
+### Using [`go tool`](https://pkg.go.dev/cmd/go#hdr-Run_specified_go_tool)
 
 ```bash
 # Add to go.mod as a tool dependency
