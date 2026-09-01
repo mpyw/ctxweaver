@@ -24,7 +24,17 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 	funcHasTypeParams := decl.Type.TypeParams != nil && len(decl.Type.TypeParams.List) > 0
 	vars.IsGenericFunc = funcHasTypeParams
 
-	// Build fully qualified function name
+	// Build fully qualified function name.
+	//
+	// The format mirrors how the Go runtime prints functions in stack traces:
+	// type arguments are collapsed to "[...]", and a generic method carries its
+	// own "[...]" independently of its receiver (e.g. "pkg.(*T[...]).M[...]").
+	// Methods gained type parameters in Go 1.27.
+	baseName := decl.Name.Name
+	if funcHasTypeParams {
+		baseName += "[...]"
+	}
+
 	if decl.Recv != nil && len(decl.Recv.List) > 0 {
 		vars.IsMethod = true
 		recv := decl.Recv.List[0]
@@ -38,28 +48,20 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 		vars.ReceiverType = recvTypeName
 		vars.IsGenericReceiver = recvHasGenerics
 
-		switch recv.Type.(type) {
-		case *dst.StarExpr:
+		recvName := recvTypeName
+		if recvHasGenerics {
+			recvName += "[...]"
+		}
+
+		if _, ok := recv.Type.(*dst.StarExpr); ok {
 			vars.IsPointerReceiver = true
-			if recvHasGenerics {
-				vars.FuncName = fmt.Sprintf("%s.(*%s[...]).%s", vars.PackageName, recvTypeName, decl.Name.Name)
-			} else {
-				vars.FuncName = fmt.Sprintf("%s.(*%s).%s", vars.PackageName, recvTypeName, decl.Name.Name)
-			}
-		default:
-			if recvHasGenerics {
-				vars.FuncName = fmt.Sprintf("%s.%s[...].%s", vars.PackageName, recvTypeName, decl.Name.Name)
-			} else {
-				vars.FuncName = fmt.Sprintf("%s.%s.%s", vars.PackageName, recvTypeName, decl.Name.Name)
-			}
+			vars.FuncName = fmt.Sprintf("%s.(*%s).%s", vars.PackageName, recvName, baseName)
+		} else {
+			vars.FuncName = fmt.Sprintf("%s.%s.%s", vars.PackageName, recvName, baseName)
 		}
 	} else {
 		// Regular function (not a method)
-		if funcHasTypeParams {
-			vars.FuncName = fmt.Sprintf("%s.%s[...]", vars.PackageName, decl.Name.Name)
-		} else {
-			vars.FuncName = fmt.Sprintf("%s.%s", vars.PackageName, decl.Name.Name)
-		}
+		vars.FuncName = fmt.Sprintf("%s.%s", vars.PackageName, baseName)
 	}
 
 	return vars
