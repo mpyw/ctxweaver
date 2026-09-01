@@ -148,7 +148,7 @@ Validate config changes with `goreleaser check`, and dry-run with `goreleaser re
 | `ReceiverVar` | Receiver variable name |
 | `IsMethod` | Whether this is a method |
 | `IsPointerReceiver` | Whether receiver is a pointer |
-| `IsGenericFunc` | Whether function has type parameters |
+| `IsGenericFunc` | Whether the function or method has its own type parameters |
 | `IsGenericReceiver` | Whether receiver type has type parameters |
 
 ## Related Projects

@@ -16,7 +16,7 @@
 #   - {{.ReceiverType}}      : Receiver type name for methods (e.g., "MyService")
 #   - {{.ReceiverVar}}       : Receiver variable name for methods (e.g., "s")
 #   - {{.IsPointerReceiver}} : true if the receiver is a pointer
-#   - {{.IsGenericFunc}}     : true if the function has type parameters
+#   - {{.IsGenericFunc}}     : true if the function or method has its own type parameters
 #   - {{.IsGenericReceiver}} : true if the receiver type has type parameters
 #
 # Built-in template functions:
@@ -28,8 +28,11 @@
 #   - Method (pointer receiver):      "service.(*UserService).GetByID"
 #   - Method (value receiver):        "service.UserService.String"
 #   - Generic function:               "service.Process[...]"
-#   - Generic method (pointer):       "service.(*Container[...]).Get"
-#   - Generic method (value):         "service.Wrapper[...].Unwrap"
+#   - Generic method (pointer):       "service.(*Registry).Register[...]"
+#   - Generic method (value):         "service.Registry.Lookup[...]"
+#   - Method on generic type (ptr):   "service.(*Container[...]).Get"
+#   - Method on generic type (value): "service.Wrapper[...].Unwrap"
+#   - Generic method on generic type: "service.Container[...].Map[...]"
 #
 # Can be specified as:
 #   - Inline string: template: "defer trace({{.Ctx}})"

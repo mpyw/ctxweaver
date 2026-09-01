@@ -178,6 +178,149 @@ func TestBuildVars(t *testing.T) {
 				IsGenericReceiver: true,
 			},
 		},
+		"generic method on non-generic type": {
+			file: &dst.File{Name: &dst.Ident{Name: "registry"}},
+			decl: &dst.FuncDecl{
+				Name: &dst.Ident{Name: "Lookup"},
+				Recv: &dst.FieldList{
+					List: []*dst.Field{{
+						Names: []*dst.Ident{{Name: "r"}},
+						Type:  &dst.Ident{Name: "Registry"},
+					}},
+				},
+				Type: &dst.FuncType{
+					TypeParams: &dst.FieldList{
+						List: []*dst.Field{{Names: []*dst.Ident{{Name: "T"}}}},
+					},
+				},
+			},
+			pkgPath: "github.com/example/myapp/registry",
+			carrier: config.CarrierDef{},
+			varName: "ctx",
+			expected: Vars{
+				Ctx:           "ctx",
+				CtxVar:        "ctx",
+				PackageName:   "registry",
+				PackagePath:   "github.com/example/myapp/registry",
+				FuncBaseName:  "Lookup",
+				FuncName:      "registry.Registry.Lookup[...]",
+				ReceiverType:  "Registry",
+				ReceiverVar:   "r",
+				IsMethod:      true,
+				IsGenericFunc: true,
+			},
+		},
+		"generic method with pointer receiver on non-generic type": {
+			file: &dst.File{Name: &dst.Ident{Name: "registry"}},
+			decl: &dst.FuncDecl{
+				Name: &dst.Ident{Name: "Register"},
+				Recv: &dst.FieldList{
+					List: []*dst.Field{{
+						Names: []*dst.Ident{{Name: "r"}},
+						Type:  &dst.StarExpr{X: &dst.Ident{Name: "Registry"}},
+					}},
+				},
+				Type: &dst.FuncType{
+					TypeParams: &dst.FieldList{
+						List: []*dst.Field{{Names: []*dst.Ident{{Name: "T"}}}},
+					},
+				},
+			},
+			pkgPath: "github.com/example/myapp/registry",
+			carrier: config.CarrierDef{},
+			varName: "ctx",
+			expected: Vars{
+				Ctx:               "ctx",
+				CtxVar:            "ctx",
+				PackageName:       "registry",
+				PackagePath:       "github.com/example/myapp/registry",
+				FuncBaseName:      "Register",
+				FuncName:          "registry.(*Registry).Register[...]",
+				ReceiverType:      "Registry",
+				ReceiverVar:       "r",
+				IsMethod:          true,
+				IsPointerReceiver: true,
+				IsGenericFunc:     true,
+			},
+		},
+		"generic method on generic type": {
+			file: &dst.File{Name: &dst.Ident{Name: "container"}},
+			decl: &dst.FuncDecl{
+				Name: &dst.Ident{Name: "Map"},
+				Recv: &dst.FieldList{
+					List: []*dst.Field{{
+						Names: []*dst.Ident{{Name: "c"}},
+						Type: &dst.IndexExpr{
+							X:     &dst.Ident{Name: "Container"},
+							Index: &dst.Ident{Name: "T"},
+						},
+					}},
+				},
+				Type: &dst.FuncType{
+					TypeParams: &dst.FieldList{
+						List: []*dst.Field{{Names: []*dst.Ident{{Name: "U"}}}},
+					},
+				},
+			},
+			pkgPath: "github.com/example/myapp/container",
+			carrier: config.CarrierDef{},
+			varName: "ctx",
+			expected: Vars{
+				Ctx:               "ctx",
+				CtxVar:            "ctx",
+				PackageName:       "container",
+				PackagePath:       "github.com/example/myapp/container",
+				FuncBaseName:      "Map",
+				FuncName:          "container.Container[...].Map[...]",
+				ReceiverType:      "Container",
+				ReceiverVar:       "c",
+				IsMethod:          true,
+				IsGenericFunc:     true,
+				IsGenericReceiver: true,
+			},
+		},
+		"generic method with pointer receiver on generic type": {
+			file: &dst.File{Name: &dst.Ident{Name: "container"}},
+			decl: &dst.FuncDecl{
+				Name: &dst.Ident{Name: "Fold"},
+				Recv: &dst.FieldList{
+					List: []*dst.Field{{
+						Names: []*dst.Ident{{Name: "c"}},
+						Type: &dst.StarExpr{
+							X: &dst.IndexExpr{
+								X:     &dst.Ident{Name: "Container"},
+								Index: &dst.Ident{Name: "T"},
+							},
+						},
+					}},
+				},
+				Type: &dst.FuncType{
+					TypeParams: &dst.FieldList{
+						List: []*dst.Field{
+							{Names: []*dst.Ident{{Name: "A"}}},
+							{Names: []*dst.Ident{{Name: "B"}}},
+						},
+					},
+				},
+			},
+			pkgPath: "github.com/example/myapp/container",
+			carrier: config.CarrierDef{},
+			varName: "ctx",
+			expected: Vars{
+				Ctx:               "ctx",
+				CtxVar:            "ctx",
+				PackageName:       "container",
+				PackagePath:       "github.com/example/myapp/container",
+				FuncBaseName:      "Fold",
+				FuncName:          "container.(*Container[...]).Fold[...]",
+				ReceiverType:      "Container",
+				ReceiverVar:       "c",
+				IsMethod:          true,
+				IsPointerReceiver: true,
+				IsGenericFunc:     true,
+				IsGenericReceiver: true,
+			},
+		},
 		"method without receiver name": {
 			file: &dst.File{Name: &dst.Ident{Name: "service"}},
 			decl: &dst.FuncDecl{

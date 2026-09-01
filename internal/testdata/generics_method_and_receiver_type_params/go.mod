@@ -1,0 +1,7 @@
+module example.com/generics_method_and_receiver_type_params
+
+go 1.27.0
+
+require go.opentelemetry.io/otel v1.0.0
+
+replace go.opentelemetry.io/otel => ../../_stubs/go.opentelemetry.io/otel

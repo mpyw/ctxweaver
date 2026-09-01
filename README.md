@@ -288,12 +288,12 @@ ctxweaver -no-hooks ./...
 | `{{.ReceiverVar}}` | `string` | Receiver variable name (empty if not a method) |
 | `{{.IsMethod}}` | `bool` | Whether this is a method |
 | `{{.IsPointerReceiver}}` | `bool` | Whether the receiver is a pointer |
-| `{{.IsGenericFunc}}` | `bool` | Whether the function has type parameters |
+| `{{.IsGenericFunc}}` | `bool` | Whether the function or method has its own type parameters |
 | `{{.IsGenericReceiver}}` | `bool` | Whether the receiver type has type parameters |
 
 ### FuncName Format
 
-`{{.FuncName}}` provides a fully qualified function name in the following format:
+`{{.FuncName}}` provides a fully qualified function name in the following format, mirroring how the Go runtime prints functions in stack traces: type arguments are collapsed to `[...]`, and a generic method (Go 1.27+) carries its own `[...]` independently of its receiver.
 
 | Type | Format | Example |
 |------|--------|---------|
@@ -301,8 +301,11 @@ ctxweaver -no-hooks ./...
 | Method (pointer receiver) | `pkg.(*Type).Method` | `service.(*UserService).GetByID` |
 | Method (value receiver) | `pkg.Type.Method` | `service.UserService.String` |
 | Generic function | `pkg.Func[...]` | `service.Process[...]` |
-| Generic method (pointer) | `pkg.(*Type[...]).Method` | `service.(*Container[...]).Get` |
-| Generic method (value) | `pkg.Type[...].Method` | `service.Wrapper[...].Unwrap` |
+| Generic method (pointer) | `pkg.(*Type).Method[...]` | `service.(*Registry).Register[...]` |
+| Generic method (value) | `pkg.Type.Method[...]` | `service.Registry.Lookup[...]` |
+| Method on generic type (pointer) | `pkg.(*Type[...]).Method` | `service.(*Container[...]).Get` |
+| Method on generic type (value) | `pkg.Type[...].Method` | `service.Wrapper[...].Unwrap` |
+| Generic method on generic type | `pkg.Type[...].Method[...]` | `service.Container[...].Map[...]` |
 
 ### Built-in Functions
 
@@ -339,19 +342,19 @@ template: |
   {{- if .IsGenericReceiver -}}
     {{- $receiver = printf "%s[...]" .ReceiverType -}}
   {{- end -}}
+  {{- $base := .FuncBaseName -}}
+  {{- if .IsGenericFunc -}}
+    {{- $base = printf "%s[...]" .FuncBaseName -}}
+  {{- end -}}
   {{- $name := "" -}}
   {{- if .IsMethod -}}
     {{- if .IsPointerReceiver -}}
-      {{- $name = printf "%s.(*%s).%s" .PackageName $receiver .FuncBaseName -}}
+      {{- $name = printf "%s.(*%s).%s" .PackageName $receiver $base -}}
     {{- else -}}
-      {{- $name = printf "%s.%s.%s" .PackageName $receiver .FuncBaseName -}}
+      {{- $name = printf "%s.%s.%s" .PackageName $receiver $base -}}
     {{- end -}}
   {{- else -}}
-    {{- if .IsGenericFunc -}}
-      {{- $name = printf "%s.%s[...]" .PackageName .FuncBaseName -}}
-    {{- else -}}
-      {{- $name = printf "%s.%s" .PackageName .FuncBaseName -}}
-    {{- end -}}
+    {{- $name = printf "%s.%s" .PackageName $base -}}
   {{- end -}}
   defer newrelic.FromContext({{.Ctx}}).StartSegment({{$name | quote}}).End()
 imports:
