@@ -107,6 +107,17 @@ go build -o bin/ctxweaver ./cmd/ctxweaver
 ./bin/ctxweaver -dry-run -verbose ./...
 ```
 
+## Releasing
+
+Releases are cut from GitHub Actions, never locally:
+
+- **Tag and Release** (`tag_and_release.yml`) — the normal path: creates the `vX.Y.Z` tag, then builds and publishes.
+- `tag.yml` / `release.yml` are the two halves, dispatchable on their own when a tag already exists.
+
+`release.yml` runs goreleaser (`.goreleaser.yaml`) once for all six targets — darwin/linux/windows x amd64/arm64, `CGO_ENABLED=0` — and uploads the archives plus `checksums.txt` to the release. Those assets are what makes `mise use -g "github:mpyw/ctxweaver"` work, so a release with no assets breaks the documented install path. goreleaser is pinned to 2.17.1: 2.18.0 attests every build artifact, which fails the job.
+
+Validate config changes with `goreleaser check`, and dry-run with `goreleaser release --snapshot --clean --skip=publish`.
+
 ## Testing Strategy
 
 - Integration tests in root `*_test.go` files
