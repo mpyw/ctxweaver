@@ -1,5 +1,6 @@
 // The node matchers live apart from match.go only for length; they and the
 // Matcher that dispatches to them form one unit.
+//
 //declscope:namespace match
 package dstutil
 

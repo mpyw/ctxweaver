@@ -7,3 +7,6 @@ rules:
     # Reach exported declarations too. Inside the package they are read as bare
     # as any other name, so the namespace is wanted at the same call sites.
     exported: true
+    # stmt is Go's own abbreviation, so the spelled-out word carries it.
+    vocabulary:
+      stmt: [statement]
