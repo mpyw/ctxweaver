@@ -1,0 +1,163 @@
+# declscope baseline
+#
+# Violations recorded here are suppressed; new ones are still reported.
+# Regenerate with:
+#
+#     declscope baseline ./...
+#
+# Do not edit by hand. An entry disappears when its violation is fixed, so the
+# diff of a regeneration is the record of what was cleaned up.
+packages:
+  github.com/mpyw/ctxweaver/internal:
+    qualify:
+      color:
+        - stderrIsTTY
+        - stdoutIsTTY
+      helpers:
+        - Must
+  github.com/mpyw/ctxweaver/internal/dstutil:
+    boundary:
+      comparers:
+        - compareAssignStmt
+        - compareBasicLit
+        - compareBinaryExpr
+        - compareBlockStmt
+        - compareCallExpr
+        - compareCaseClause
+        - compareCompositeLit
+        - compareDeferStmt
+        - compareExprStmt
+        - compareFuncLit
+        - compareFuncType
+        - compareIdent
+        - compareIfStmt
+        - compareIndexExpr
+        - compareKeyValueExpr
+        - compareParenExpr
+        - compareReturnStmt
+        - compareSelectorExpr
+        - compareStarExpr
+        - compareSwitchStmt
+        - compareTypeAssertExpr
+        - compareUnaryExpr
+      matcher:
+        - compareFieldLists
+        - compareNodeLists
+    qualify:
+      comparers:
+        - compareAssignStmt
+        - compareBasicLit
+        - compareBinaryExpr
+        - compareBlockStmt
+        - compareCallExpr
+        - compareCaseClause
+        - compareCompositeLit
+        - compareDeferStmt
+        - compareExprStmt
+        - compareFuncLit
+        - compareFuncType
+        - compareIdent
+        - compareIfStmt
+        - compareIndexExpr
+        - compareKeyValueExpr
+        - compareParenExpr
+        - compareReturnStmt
+        - compareSelectorExpr
+        - compareStarExpr
+        - compareSwitchStmt
+        - compareTypeAssertExpr
+        - compareUnaryExpr
+      matcher:
+        - Comparator
+        - MatchesExact
+        - MatchesSkeleton
+        - NewComparator
+        - NodeComparer
+        - compareFieldLists
+        - compareNodeLists
+        - defaultComparator
+        - erasedComparer
+      stmt:
+        - InsertStatements
+        - ParseStatements
+        - RemoveStatements
+        - UpdateStatements
+  github.com/mpyw/ctxweaver/pkg/config:
+    boundary:
+      config:
+        - defaultCarriers
+    qualify:
+      config:
+        - defaultCarriers
+        - defaultCarriersYAML
+        - schemaJSON
+        - validateSchema
+      types:
+        - CarrierDef
+        - Carriers
+        - CarriersFile
+        - Config
+        - FuncScope
+        - FuncScopeExported
+        - FuncScopeUnexported
+        - FuncType
+        - FuncTypeFunction
+        - FuncTypeMethod
+        - Functions
+        - Hooks
+        - Packages
+        - Regexps
+        - Template
+  github.com/mpyw/ctxweaver/pkg/processor:
+    boundary:
+      action:
+        - Processor.detectAction
+      inspect:
+        - Processor.processFunctions
+      processor:
+        - Processor.dryRun
+        - Processor.funcFilter
+        - Processor.imports
+        - Processor.pkgRegexps
+        - Processor.registry
+        - Processor.remove
+        - Processor.test
+        - Processor.tmpl
+        - Processor.verbose
+    qualify:
+      inspect:
+        - collectCandidates
+        - extractFirstParam
+        - funcCandidate
+        - matchesFuncFilter
+        - processCandidate
+        - processFunctions
+        - shouldSkipDecl
+        - tryMatchCarrier
+      process:
+        - buildRestorerResolver
+        - shouldExcludePackage
+      processor:
+        - CompileRegexps
+        - CompiledRegexps
+        - FuncFilter
+        - New
+        - NewFuncFilter
+        - Option
+        - ProcessResult
+        - WithDryRun
+        - WithFunctions
+        - WithPackageRegexps
+        - WithRemove
+        - WithTest
+        - WithVerbose
+        - compilePatterns
+  github.com/mpyw/ctxweaver/pkg/template:
+    qualify:
+      template:
+        - MustParse
+        - Parse
+        - Vars
+        - funcs
+      vars:
+        - extractReceiverTypeName
