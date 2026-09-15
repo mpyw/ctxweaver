@@ -17,13 +17,13 @@ const (
 )
 
 var (
-	stdoutIsTTY = term.IsTerminal(int(os.Stdout.Fd()))
-	stderrIsTTY = term.IsTerminal(int(os.Stderr.Fd()))
+	stdoutColorable = term.IsTerminal(int(os.Stdout.Fd()))
+	stderrColorable = term.IsTerminal(int(os.Stderr.Fd()))
 )
 
 // StdoutColor returns the color code if stdout is a TTY, otherwise empty string.
 func StdoutColor(color string) string {
-	if stdoutIsTTY {
+	if stdoutColorable {
 		return color
 	}
 	return ""
@@ -31,7 +31,7 @@ func StdoutColor(color string) string {
 
 // StderrColor returns the color code if stderr is a TTY, otherwise empty string.
 func StderrColor(color string) string {
-	if stderrIsTTY {
+	if stderrColorable {
 		return color
 	}
 	return ""
