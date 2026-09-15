@@ -412,7 +412,7 @@ func TestBuildVars(t *testing.T) {
 	}
 }
 
-func TestExtractReceiverTypeName(t *testing.T) {
+func TestExtractReceiverVars(t *testing.T) {
 	tests := map[string]struct {
 		expr        dst.Expr
 		wantName    string
@@ -506,12 +506,12 @@ func TestExtractReceiverTypeName(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			gotName, gotGeneric := extractReceiverTypeName(tt.expr)
+			gotName, gotGeneric := extractReceiverVars(tt.expr)
 			if gotName != tt.wantName {
-				t.Errorf("extractReceiverTypeName() name = %q, want %q", gotName, tt.wantName)
+				t.Errorf("extractReceiverVars() name = %q, want %q", gotName, tt.wantName)
 			}
 			if gotGeneric != tt.wantGeneric {
-				t.Errorf("extractReceiverTypeName() hasGenerics = %v, want %v", gotGeneric, tt.wantGeneric)
+				t.Errorf("extractReceiverVars() hasGenerics = %v, want %v", gotGeneric, tt.wantGeneric)
 			}
 		})
 	}

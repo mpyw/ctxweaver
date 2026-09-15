@@ -1,3 +1,5 @@
+//declscope:core
+
 // Package template provides template rendering for ctxweaver.
 package template
 
