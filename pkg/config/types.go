@@ -1,3 +1,7 @@
+// The Config tree these types spell out is the unit the package is named for,
+// so this file is the package core.
+//
+//declscope:core
 package config
 
 import (

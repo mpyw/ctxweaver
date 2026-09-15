@@ -53,6 +53,11 @@ func (a removeAction) Apply(body *dst.BlockStmt, _ string) bool {
 
 // detectAction determines what action to take for a function body.
 // Uses skeleton matching to compare AST structure. Supports multi-statement templates.
+//
+// This is the entry point of the action layer: candidate.go asks here which
+// action a body needs.
+//
+//declscope:package
 func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (Action, error) {
 	// Parse the rendered statements for skeleton comparison
 	targetStmts, err := dstutil.ParseStatements(renderedStmt)

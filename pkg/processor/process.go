@@ -45,7 +45,7 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 		}
 
 		// Check if package should be excluded by regex patterns
-		if p.shouldExcludePackage(pkg.PkgPath) {
+		if !p.shouldProcessPackage(pkg.PkgPath) {
 			if p.verbose {
 				fmt.Printf("excluded: %s\n", pkg.PkgPath)
 			}
@@ -87,19 +87,9 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 	return result, nil
 }
 
-// shouldExcludePackage checks if the package path should be excluded based on regex filters.
-func (p *Processor) shouldExcludePackage(pkgPath string) bool {
-	return !p.pkgRegexps.Match(pkgPath)
-}
-
-// buildRestorerResolver creates a resolver from packages.Package.Imports.
-// This avoids additional packages.Load calls while providing accurate package names.
-func buildRestorerResolver(pkg *packages.Package) guess.RestorerResolver {
-	m := make(map[string]string, len(pkg.Imports))
-	for path, imported := range pkg.Imports {
-		m[path] = imported.Name
-	}
-	return guess.WithMap(m)
+// shouldProcessPackage checks if the package path passes the regex filters.
+func (p *Processor) shouldProcessPackage(pkgPath string) bool {
+	return p.pkgRegexps.Match(pkgPath)
 }
 
 func (p *Processor) shouldProcessFile(filename string) bool {
@@ -132,7 +122,7 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 	}
 
 	// Process functions
-	modified, err := p.processFunctions(df, pkg.PkgPath)
+	modified, err := p.processCandidates(df, pkg.PkgPath)
 	if err != nil {
 		return false, err
 	}
@@ -140,8 +130,14 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 		return false, nil
 	}
 
-	// Convert back to AST using package import info (no additional packages.Load)
-	restorer := decorator.NewRestorerWithImports(pkg.PkgPath, buildRestorerResolver(pkg))
+	// Convert back to AST using package import info. Resolving from
+	// packages.Package.Imports avoids additional packages.Load calls while
+	// providing accurate package names.
+	resolver := make(map[string]string, len(pkg.Imports))
+	for path, imported := range pkg.Imports {
+		resolver[path] = imported.Name
+	}
+	restorer := decorator.NewRestorerWithImports(pkg.PkgPath, guess.WithMap(resolver))
 	f, err := restorer.RestoreFile(df)
 	if err != nil {
 		return false, fmt.Errorf("failed to restore file: %w", err)

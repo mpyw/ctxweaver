@@ -19,15 +19,8 @@ type funcCandidate struct {
 	match *carrier.MatchResult
 }
 
-func extractFirstParam(decl *dst.FuncDecl) *dst.Field {
-	if decl.Type == nil || decl.Type.Params == nil || len(decl.Type.Params.List) == 0 {
-		return nil
-	}
-	return decl.Type.Params.List[0]
-}
-
-// shouldSkipDecl checks if a function declaration should be skipped.
-func shouldSkipDecl(decl *dst.FuncDecl) bool {
+// shouldSkipCandidate checks if a function declaration should be skipped.
+func shouldSkipCandidate(decl *dst.FuncDecl) bool {
 	if directive.HasSkipDirective(decl.Decorations()) {
 		return true
 	}
@@ -37,8 +30,8 @@ func shouldSkipDecl(decl *dst.FuncDecl) bool {
 	return false
 }
 
-// matchesFuncFilter checks if a function matches the configured filter.
-func (p *Processor) matchesFuncFilter(decl *dst.FuncDecl) bool {
+// candidateMatchesFilter checks if a function matches the configured filter.
+func (p *Processor) candidateMatchesFilter(decl *dst.FuncDecl) bool {
 	if p.funcFilter == nil {
 		return true
 	}
@@ -47,15 +40,14 @@ func (p *Processor) matchesFuncFilter(decl *dst.FuncDecl) bool {
 	return p.funcFilter.Match(decl.Name.Name, isMethod, token.IsExported(decl.Name.Name))
 }
 
-// tryMatchCarrier attempts to match the first parameter against registered carriers.
-// Returns nil if no match is found.
-func (p *Processor) tryMatchCarrier(decl *dst.FuncDecl) *funcCandidate {
-	param := extractFirstParam(decl)
-	if param == nil {
+// candidateFor attempts to match the first parameter of decl against
+// registered carriers. Returns nil if no match is found.
+func (p *Processor) candidateFor(decl *dst.FuncDecl) *funcCandidate {
+	if decl.Type == nil || decl.Type.Params == nil || len(decl.Type.Params.List) == 0 {
 		return nil
 	}
 
-	result := carrier.Match(param, p.registry)
+	result := carrier.Match(decl.Type.Params.List[0], p.registry)
 	if result == nil {
 		return nil
 	}
@@ -77,15 +69,15 @@ func (p *Processor) collectCandidates(df *dst.File) []funcCandidate {
 			return true
 		}
 
-		if shouldSkipDecl(decl) {
+		if shouldSkipCandidate(decl) {
 			return true
 		}
 
-		if !p.matchesFuncFilter(decl) {
+		if !p.candidateMatchesFilter(decl) {
 			return true
 		}
 
-		if c := p.tryMatchCarrier(decl); c != nil {
+		if c := p.candidateFor(decl); c != nil {
 			candidates = append(candidates, *c)
 		}
 
@@ -113,9 +105,15 @@ func (p *Processor) processCandidate(c funcCandidate, df *dst.File, pkgPath stri
 	return action.Apply(c.decl.Body, rendered), nil
 }
 
-// processFunctions processes functions in the DST file.
-// Relies on dst.Ident.Path set by NewDecoratorFromPackage for import resolution.
-func (p *Processor) processFunctions(df *dst.File, pkgPath string) (bool, error) {
+// processCandidates collects and processes the candidate functions in the DST
+// file. Relies on dst.Ident.Path set by NewDecoratorFromPackage for import
+// resolution.
+//
+// This is the entry point of the candidate pipeline: process.go hands each
+// decorated file here.
+//
+//declscope:package
+func (p *Processor) processCandidates(df *dst.File, pkgPath string) (bool, error) {
 	candidates := p.collectCandidates(df)
 
 	var modified bool

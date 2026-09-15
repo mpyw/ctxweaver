@@ -44,7 +44,7 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 		}
 
 		// Extract receiver type name and check for generics
-		recvTypeName, recvHasGenerics := extractReceiverTypeName(recv.Type)
+		recvTypeName, recvHasGenerics := extractReceiverVars(recv.Type)
 		vars.ReceiverType = recvTypeName
 		vars.IsGenericReceiver = recvHasGenerics
 
@@ -67,10 +67,11 @@ func BuildVars(df *dst.File, decl *dst.FuncDecl, pkgPath string, carrier config.
 	return vars
 }
 
-// extractReceiverTypeName extracts the base type name from a receiver type expression.
-// It handles regular types, pointer types, and generic types (IndexExpr, IndexListExpr).
-// Returns the type name and a boolean indicating whether it has type parameters.
-func extractReceiverTypeName(expr dst.Expr) (name string, hasGenerics bool) {
+// extractReceiverVars extracts the receiver-derived template variables from a
+// receiver type expression: the base type name and whether it has type
+// parameters. It handles regular types, pointer types, and generic types
+// (IndexExpr, IndexListExpr).
+func extractReceiverVars(expr dst.Expr) (name string, hasGenerics bool) {
 	// Unwrap pointer if present
 	if star, ok := expr.(*dst.StarExpr); ok {
 		expr = star.X
@@ -90,11 +91,11 @@ func extractReceiverTypeName(expr dst.Expr) (name string, hasGenerics bool) {
 		// These branches handle extremely rare nested generic receiver patterns.
 		// In practice, receiver types are almost always simple generics like T[X].
 		if inner, ok := t.X.(*dst.IndexExpr); ok {
-			name, _ := extractReceiverTypeName(inner)
+			name, _ := extractReceiverVars(inner)
 			return name, true
 		}
 		if inner, ok := t.X.(*dst.IndexListExpr); ok {
-			name, _ := extractReceiverTypeName(inner)
+			name, _ := extractReceiverVars(inner)
 			return name, true
 		}
 

@@ -13,25 +13,15 @@ import (
 	"github.com/mpyw/ctxweaver/internal"
 )
 
-//go:embed carriers.yaml
-var defaultCarriersYAML []byte
-
 //go:embed schema.json
-var schemaJSON []byte
+var configSchemaJSON []byte
 
-// Parsed at init time - failure here means corrupted embedded files.
-var (
-	defaultCarriers []CarrierDef
-	configSchema    *jsonschema.Schema
-)
+// Compiled at init time - failure here means corrupted embedded files.
+var configSchema *jsonschema.Schema
 
 func init() {
-	// Parse embedded carriers.yaml
-	var carriersFile CarriersFile
-	defaultCarriers = internal.Must(carriersFile, yaml.Unmarshal(defaultCarriersYAML, &carriersFile)).Carriers
-
 	// Parse and compile embedded schema.json
-	schemaDoc := internal.Must(jsonschema.UnmarshalJSON(bytes.NewReader(schemaJSON)))
+	schemaDoc := internal.Must(jsonschema.UnmarshalJSON(bytes.NewReader(configSchemaJSON)))
 	compiler := jsonschema.NewCompiler()
 	internal.Must(struct{}{}, compiler.AddResource("schema.json", schemaDoc))
 	configSchema = internal.Must(compiler.Compile("schema.json"))
@@ -51,7 +41,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Validate against JSON Schema
-	if err := validateSchema(raw); err != nil {
+	if err := configSchema.Validate(raw); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
@@ -67,9 +57,4 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.SetDefaults()
 
 	return &cfg, nil
-}
-
-// validateSchema validates data against the embedded JSON Schema.
-func validateSchema(data any) error {
-	return configSchema.Validate(data)
 }
