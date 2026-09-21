@@ -5,9 +5,6 @@
 [![Codecov](https://codecov.io/gh/mpyw/ctxweaver/graph/badge.svg)](https://codecov.io/gh/mpyw/ctxweaver)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> [!NOTE]
-> This project was written by AI (Claude Code).
-
 A Go code generator that weaves statements into functions receiving context-like parameters.
 
 ## Overview
