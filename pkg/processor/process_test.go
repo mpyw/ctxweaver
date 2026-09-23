@@ -1099,6 +1099,14 @@ func Prose(ctx context.Context) {
 //ctxweaver:skipx
 func Lookalike(ctx context.Context) {
 }
+
+//ctxweaver:Skip
+func Uppercase(ctx context.Context) {
+}
+
+//ctxweaver:
+func NoName(ctx context.Context) {
+}
 `,
 		})
 
@@ -1107,6 +1115,8 @@ func Lookalike(ctx context.Context) {
 			filepath.Join(dir, "funcs.go") + ":5: malformed ctxweaver directive: write //ctxweaver:skip",
 			filepath.Join(dir, "funcs.go") + ":9: malformed ctxweaver directive: write //ctxweaver:skip",
 			filepath.Join(dir, "funcs.go") + ":13: malformed ctxweaver directive: write //ctxweaver:skip",
+			filepath.Join(dir, "funcs.go") + ":25: malformed ctxweaver directive",
+			filepath.Join(dir, "funcs.go") + ":29: malformed ctxweaver directive",
 		}
 		got := slices.Clone(result.Warnings)
 		for i := range got {
@@ -1125,7 +1135,7 @@ func Lookalike(ctx context.Context) {
 		if got := read(t, dir, "file.go"); !strings.Contains(got, trace) {
 			t.Errorf("a malformed file-level directive should not skip:\n%s", got)
 		}
-		if got := read(t, dir, "funcs.go"); strings.Count(got, trace) != 5 {
+		if got := read(t, dir, "funcs.go"); strings.Count(got, trace) != 7 {
 			t.Errorf("every function should be woven:\n%s", got)
 		}
 	})

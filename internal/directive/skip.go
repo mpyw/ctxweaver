@@ -26,30 +26,47 @@ func isSkipComment(text string) bool {
 	return ok && d.Tool == directiveTool && d.Name == skipName
 }
 
-// IsMalformed reports whether a comment looks like a ctxweaver directive but
-// is not in the canonical "//ctxweaver:name" form.
+// Malformed reports whether a comment is addressed to ctxweaver but is not a
+// valid directive, and returns the warning for it.
 //
-// It matches a comment whose body starts with "ctxweaver:" after optional
-// whitespace, following "//" or "/*". So a space or tab after "//", a space
-// after the colon, and block comments are malformed. Prose that mentions
-// "ctxweaver:skip" partway through a sentence is not.
-func IsMalformed(text string) bool {
+// A comment is addressed to ctxweaver when its body, after "//" or "/*",
+// starts with "ctxweaver:" once optional whitespace is skipped. It is a
+// directive when [ast.ParseDirective] accepts it with the tool "ctxweaver". So
+// a space or tab after "//", a space after the colon, a block comment, a name
+// that is missing or does not start with a lowercase letter or digit are all
+// malformed. A lookalike name such as "skipx" is valid syntax and not
+// malformed. Prose that mentions "ctxweaver:skip" partway through a sentence
+// is not addressed.
+//
+// The warning suggests "//ctxweaver:<name>" only when that rewritten text is
+// itself a directive. The name is never changed or guessed.
+func Malformed(text string) (string, bool) {
 	body, ok := strings.CutPrefix(text, "//")
 	if !ok {
 		if body, ok = strings.CutPrefix(text, "/*"); !ok {
-			return false
+			return "", false
 		}
 		body = strings.TrimSuffix(body, "*/")
 	}
-	if !strings.HasPrefix(strings.TrimLeft(body, " \t"), directiveTool+":") {
-		return false
+	rest, ok := strings.CutPrefix(strings.TrimLeft(body, " \t"), directiveTool+":")
+	if !ok {
+		return "", false
 	}
-	d, ok := ast.ParseDirective(token.NoPos, text)
-	return !ok || d.Tool != directiveTool
-}
+	if d, ok := ast.ParseDirective(token.NoPos, text); ok && d.Tool == directiveTool {
+		return "", false
+	}
 
-// MalformedMessage is the warning for a comment that [IsMalformed] matches.
-const MalformedMessage = "malformed ctxweaver directive: write //ctxweaver:skip"
+	const message = "malformed " + directiveTool + " directive"
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return message, true
+	}
+	suggestion := "//" + directiveTool + ":" + fields[0]
+	if d, ok := ast.ParseDirective(token.NoPos, suggestion); !ok || d.Tool != directiveTool {
+		return message, true
+	}
+	return message + ": write " + suggestion, true
+}
 
 // HasSkipDirective checks if node decorations contain a skip directive.
 // This is used for file-level and function-level skip directives.

@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `//ctxweaver:skip` - Skip processing for a file, a function, or a matching statement
 
-Only Go's canonical form `//ctxweaver:name` counts. A spelling with a space after `//`, a space after the colon, or a block comment is malformed: it has no effect, and `Process` returns a warning with its position in `ProcessResult.Warnings`. A warning does not fail the run.
+Only Go's canonical form `//ctxweaver:name` counts. A spelling with a space after `//`, a space after the colon, a block comment, an uppercase name or no name is malformed: it has no effect, and `Process` returns a warning with its position in `ProcessResult.Warnings`. A warning does not fail the run. It suggests `//ctxweaver:<name>` only when that rewrite is itself valid. A lookalike such as `//ctxweaver:skipx` is valid syntax, does nothing, and is not reported.
 
 ## Architecture
 

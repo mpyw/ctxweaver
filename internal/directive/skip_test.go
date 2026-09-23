@@ -287,41 +287,54 @@ func TestHasStmtSkipDirective(t *testing.T) {
 	}
 }
 
-func TestIsMalformed(t *testing.T) {
+func TestMalformed(t *testing.T) {
 	t.Parallel()
+
+	const (
+		plain   = "malformed ctxweaver directive"
+		suggest = plain + ": write //ctxweaver:skip"
+	)
 
 	tests := map[string]struct {
 		input string
-		want  bool
+		want  string // empty when the comment is not malformed
 	}{
-		"canonical":                       {input: "//ctxweaver:skip", want: false},
-		"canonical with trailing content": {input: "//ctxweaver:skip legacy code", want: false},
-		"canonical lookalike name":        {input: "//ctxweaver:skipx", want: false},
-		"space after //":                  {input: "// ctxweaver:skip", want: true},
-		"spaces after //":                 {input: "//   ctxweaver:skip", want: true},
-		"tab after //":                    {input: "//\tctxweaver:skip", want: true},
-		"space after the colon":           {input: "//ctxweaver: skip", want: true},
-		"space after // and the colon":    {input: "// ctxweaver: skip", want: true},
-		"tool without a name":             {input: "//ctxweaver:", want: true},
-		"block comment":                   {input: "/*ctxweaver:skip*/", want: true},
-		"block comment with spaces":       {input: "/* ctxweaver:skip */", want: true},
-		"prose mentioning the directive":  {input: "// write ctxweaver:skip to opt out", want: false},
-		"prose in a block comment":        {input: "/* see ctxweaver:skip */", want: false},
-		"other tool":                      {input: "// nolint:errcheck", want: false},
-		"other tool canonical":            {input: "//go:generate foo", want: false},
-		"plain comment":                   {input: "// hello", want: false},
-		"uppercase tool is not ctxweaver": {input: "// CTXWEAVER:skip", want: false},
-		"tool name as a prefix of a word": {input: "// ctxweaverish:skip", want: false},
-		"empty line comment":              {input: "//", want: false},
-		"empty block comment":             {input: "/**/", want: false},
+		"canonical":                       {input: "//ctxweaver:skip"},
+		"canonical with trailing content": {input: "//ctxweaver:skip legacy code"},
+		"canonical lookalike name":        {input: "//ctxweaver:skipx"},
+		"space after //":                  {input: "// ctxweaver:skip", want: suggest},
+		"spaces after //":                 {input: "//   ctxweaver:skip", want: suggest},
+		"tab after //":                    {input: "//\tctxweaver:skip", want: suggest},
+		"space after the colon":           {input: "//ctxweaver: skip", want: suggest},
+		"space after // and the colon":    {input: "// ctxweaver: skip legacy", want: suggest},
+		"block comment":                   {input: "/*ctxweaver:skip*/", want: suggest},
+		"block comment with spaces":       {input: "/* ctxweaver:skip */", want: suggest},
+		"spaced lookalike keeps its name": {input: "// ctxweaver:skipx", want: plain + ": write //ctxweaver:skipx"},
+		"uppercase name":                  {input: "//ctxweaver:Skip", want: plain},
+		"uppercase name with a space":     {input: "// ctxweaver:SKIP", want: plain},
+		"uppercase name in a block":       {input: "/*ctxweaver:Skip*/", want: plain},
+		"no name":                         {input: "//ctxweaver:", want: plain},
+		"no name with a space":            {input: "// ctxweaver:", want: plain},
+		"no name with trailing spaces":    {input: "//ctxweaver:   ", want: plain},
+		"no name in a block":              {input: "/* ctxweaver: */", want: plain},
+		"prose mentioning the directive":  {input: "// write ctxweaver:skip to opt out"},
+		"prose in a block comment":        {input: "/* see ctxweaver:skip */"},
+		"other tool":                      {input: "// nolint:errcheck"},
+		"other tool canonical":            {input: "//go:generate foo"},
+		"plain comment":                   {input: "// hello"},
+		"uppercase tool":                  {input: "// CTXWEAVER:skip"},
+		"tool name as a prefix of a word": {input: "// ctxweaverish:skip"},
+		"empty line comment":              {input: "//"},
+		"empty block comment":             {input: "/**/"},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := IsMalformed(tt.input); got != tt.want {
-				t.Errorf("IsMalformed(%q) = %v, want %v", tt.input, got, tt.want)
+			got, ok := Malformed(tt.input)
+			if ok != (tt.want != "") || got != tt.want {
+				t.Errorf("Malformed(%q) = (%q, %v), want %q", tt.input, got, ok, tt.want)
 			}
 		})
 	}

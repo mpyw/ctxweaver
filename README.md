@@ -466,12 +466,16 @@ A directive must use Go's canonical form `//ctxweaver:name`, the same form as `/
 | `// ctxweaver:skip` | Reported, does not skip |
 | `//ctxweaver: skip` | Reported, does not skip |
 | `/*ctxweaver:skip*/` | Reported, does not skip |
+| `//ctxweaver:Skip` | Reported, does not skip. Names are lowercase |
+| `//ctxweaver:skipx` | Valid syntax, does nothing, not reported |
 
 A comment is reported when it starts with `ctxweaver:` after `//` or `/*` and optional whitespace, but is not canonical. The report is a warning on stderr with the position:
 
 ```text
 warning: /home/me/app/handler.go:7: malformed ctxweaver directive: write //ctxweaver:skip
 ```
+
+The warning suggests `//ctxweaver:<name>` only when that rewrite is itself a valid directive. For an uppercase name or a missing name, it says only `malformed ctxweaver directive`.
 
 A warning does not make the run fail. A comment that mentions `ctxweaver:skip` partway through a sentence is not a directive and is not reported.
 
