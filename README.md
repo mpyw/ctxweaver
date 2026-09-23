@@ -41,16 +41,18 @@ The inserted statement is fully customizable via Go templates.
 **Recommended.** ctxweaver is installable directly from GitHub Releases via mise's `github` backend — no extra registry required, and no Go toolchain needed because the binaries are prebuilt:
 
 ```bash
-mise use -g "github:mpyw/ctxweaver"
+mise use "github:mpyw/ctxweaver@0.9.4"
 ctxweaver ./...
 ```
 
-Or pin it per project in `mise.toml`:
+Run it in the project root. It pins the version in the project's `mise.toml`, so every checkout and CI run the same one:
 
 ```toml
 [tools]
-"github:mpyw/ctxweaver" = "latest"
+"github:mpyw/ctxweaver" = "0.9.4"
 ```
+
+Add `-g` to install it for every project on your machine instead.
 
 > [!IMPORTANT]
 > The `go`-based methods below build ctxweaver from source, which requires **Go 1.27 or later**. With an older toolchain installed, the `go` command downloads a matching toolchain automatically unless `GOTOOLCHAIN=local` is set. `go tool` also needs Go 1.24+ on `PATH`, which is where tool directives were introduced.
