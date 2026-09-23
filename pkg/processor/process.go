@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
+	"go/token"
 	"os"
 	"strings"
 
@@ -35,6 +36,7 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 	}
 
 	result := &ProcessResult{}
+	warned := make(map[string]bool)
 
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
@@ -69,6 +71,15 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 
 			result.FilesProcessed++
 
+			// A file can belong to more than one package when tests are
+			// loaded, so each warning is kept once.
+			for _, w := range processDirectiveWarnings(pkg.Fset, file) {
+				if !warned[w] {
+					warned[w] = true
+					result.Warnings = append(result.Warnings, w)
+				}
+			}
+
 			modified, err := p.processFile(pkg, dec, file, filename)
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", filename, err))
@@ -102,6 +113,26 @@ func (p *Processor) shouldProcessFile(filename string) bool {
 		return false
 	}
 	return true
+}
+
+// processDirectiveWarnings returns a warning for each malformed ctxweaver
+// directive in the file, prefixed with its file:line position. A malformed
+// directive has no effect. Generated files are not processed, so they are not
+// checked.
+func processDirectiveWarnings(fset *token.FileSet, file *ast.File) []string {
+	if ast.IsGenerated(file) {
+		return nil
+	}
+	var warnings []string
+	for _, group := range file.Comments {
+		for _, c := range group.List {
+			if directive.IsMalformed(c.Text) {
+				pos := fset.Position(c.Slash)
+				warnings = append(warnings, fmt.Sprintf("%s:%d: %s", pos.Filename, pos.Line, directive.MalformedMessage))
+			}
+		}
+	}
+	return warnings
 }
 
 func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator, astFile *ast.File, filename string) (bool, error) {

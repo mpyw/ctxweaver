@@ -15,17 +15,41 @@ const (
 	skipName      = "skip"
 )
 
-// isSkipComment checks if a comment text is a skip directive.
-// Supports both "//ctxweaver:skip" and "// ctxweaver:skip".
+// isSkipComment reports whether a comment is the skip directive.
+//
+// Only Go's canonical directive form counts: "//ctxweaver:skip", with no space
+// after "//" and none after the colon. Trailing arguments are allowed. A
+// spelling that is close but not canonical is reported by [IsMalformed] and
+// has no effect here.
 func isSkipComment(text string) bool {
-	// go/ast only recognises the canonical, space-free form, so re-attach the
-	// comment marker to the trimmed body before handing it over.
-	if body, ok := strings.CutPrefix(text, "//"); ok {
-		text = "//" + strings.TrimSpace(body)
-	}
 	d, ok := ast.ParseDirective(token.NoPos, text)
 	return ok && d.Tool == directiveTool && d.Name == skipName
 }
+
+// IsMalformed reports whether a comment looks like a ctxweaver directive but
+// is not in the canonical "//ctxweaver:name" form.
+//
+// It matches a comment whose body starts with "ctxweaver:" after optional
+// whitespace, following "//" or "/*". So a space or tab after "//", a space
+// after the colon, and block comments are malformed. Prose that mentions
+// "ctxweaver:skip" partway through a sentence is not.
+func IsMalformed(text string) bool {
+	body, ok := strings.CutPrefix(text, "//")
+	if !ok {
+		if body, ok = strings.CutPrefix(text, "/*"); !ok {
+			return false
+		}
+		body = strings.TrimSuffix(body, "*/")
+	}
+	if !strings.HasPrefix(strings.TrimLeft(body, " \t"), directiveTool+":") {
+		return false
+	}
+	d, ok := ast.ParseDirective(token.NoPos, text)
+	return !ok || d.Tool != directiveTool
+}
+
+// MalformedMessage is the warning for a comment that [IsMalformed] matches.
+const MalformedMessage = "malformed ctxweaver directive: write //ctxweaver:skip"
 
 // HasSkipDirective checks if node decorations contain a skip directive.
 // This is used for file-level and function-level skip directives.

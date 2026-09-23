@@ -17,7 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Directives
 
-- `//ctxweaver:skip` - Skip processing for a function or entire file
+- `//ctxweaver:skip` - Skip processing for a file, a function, or a matching statement
+
+Only Go's canonical form `//ctxweaver:name` counts. A spelling with a space after `//`, a space after the colon, or a block comment is malformed: it has no effect, and `Process` returns a warning with its position in `ProcessResult.Warnings`. A warning does not fail the run.
 
 ## Architecture
 

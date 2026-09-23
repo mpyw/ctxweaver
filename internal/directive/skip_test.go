@@ -13,25 +13,37 @@ func TestIsSkipComment(t *testing.T) {
 		input string
 		want  bool
 	}{
-		"exact match without space": {
+		"canonical": {
 			input: "//ctxweaver:skip",
 			want:  true,
 		},
-		"exact match with space": {
-			input: "// ctxweaver:skip",
-			want:  true,
-		},
-		"multiple spaces after //": {
-			input: "//  ctxweaver:skip",
-			want:  true,
-		},
-		"with trailing content": {
+		"canonical with trailing content": {
 			input: "//ctxweaver:skip this function",
 			want:  true,
 		},
-		"with trailing content and space": {
-			input: "// ctxweaver:skip this function",
+		"canonical with trailing whitespace": {
+			input: "//ctxweaver:skip  ",
 			want:  true,
+		},
+		"space after //": {
+			input: "// ctxweaver:skip",
+			want:  false,
+		},
+		"multiple spaces after //": {
+			input: "//  ctxweaver:skip",
+			want:  false,
+		},
+		"tab after //": {
+			input: "//\tctxweaver:skip",
+			want:  false,
+		},
+		"space after the colon": {
+			input: "//ctxweaver: skip",
+			want:  false,
+		},
+		"block comment": {
+			input: "/*ctxweaver:skip*/",
+			want:  false,
 		},
 		"different directive": {
 			input: "//nolint:errcheck",
@@ -42,7 +54,7 @@ func TestIsSkipComment(t *testing.T) {
 			want:  false,
 		},
 		"different directive name sharing the skip prefix": {
-			input: "//ctxweaver:skipme",
+			input: "//ctxweaver:skipx",
 			want:  false, // the directive name must be exactly "skip"
 		},
 		"skip name in a different tool namespace": {
@@ -86,13 +98,19 @@ func TestHasSkipDirective(t *testing.T) {
 		decs *dst.NodeDecs
 		want bool
 	}{
-		"has skip directive": {
+		"spaced directive does not skip": {
 			decs: &dst.NodeDecs{
 				Start: dst.Decorations{"// ctxweaver:skip"},
 			},
-			want: true,
+			want: false,
 		},
-		"has skip directive without space": {
+		"block directive does not skip": {
+			decs: &dst.NodeDecs{
+				Start: dst.Decorations{"/*ctxweaver:skip*/"},
+			},
+			want: false,
+		},
+		"has skip directive": {
 			decs: &dst.NodeDecs{
 				Start: dst.Decorations{"//ctxweaver:skip"},
 			},
@@ -112,7 +130,7 @@ func TestHasSkipDirective(t *testing.T) {
 			decs: &dst.NodeDecs{
 				Start: dst.Decorations{
 					"// first comment",
-					"// ctxweaver:skip",
+					"//ctxweaver:skip",
 					"// third comment",
 				},
 			},
@@ -150,7 +168,7 @@ func TestHasStmtSkipDirective(t *testing.T) {
 				X: &dst.Ident{Name: "foo"},
 				Decs: dst.ExprStmtDecorations{
 					NodeDecs: dst.NodeDecs{
-						Start: dst.Decorations{"// ctxweaver:skip"},
+						Start: dst.Decorations{"//ctxweaver:skip"},
 					},
 				},
 			},
@@ -161,11 +179,44 @@ func TestHasStmtSkipDirective(t *testing.T) {
 				X: &dst.Ident{Name: "foo"},
 				Decs: dst.ExprStmtDecorations{
 					NodeDecs: dst.NodeDecs{
-						End: dst.Decorations{"// ctxweaver:skip"},
+						End: dst.Decorations{"//ctxweaver:skip"},
 					},
 				},
 			},
 			want: true,
+		},
+		"spaced directive in Start does not skip": {
+			stmt: &dst.ExprStmt{
+				X: &dst.Ident{Name: "foo"},
+				Decs: dst.ExprStmtDecorations{
+					NodeDecs: dst.NodeDecs{
+						Start: dst.Decorations{"// ctxweaver:skip"},
+					},
+				},
+			},
+			want: false,
+		},
+		"spaced-colon directive in End does not skip": {
+			stmt: &dst.ExprStmt{
+				X: &dst.Ident{Name: "foo"},
+				Decs: dst.ExprStmtDecorations{
+					NodeDecs: dst.NodeDecs{
+						End: dst.Decorations{"//ctxweaver: skip"},
+					},
+				},
+			},
+			want: false,
+		},
+		"block directive in End does not skip": {
+			stmt: &dst.ExprStmt{
+				X: &dst.Ident{Name: "foo"},
+				Decs: dst.ExprStmtDecorations{
+					NodeDecs: dst.NodeDecs{
+						End: dst.Decorations{"/* ctxweaver:skip */"},
+					},
+				},
+			},
+			want: false,
 		},
 		"no skip directive": {
 			stmt: &dst.ExprStmt{
@@ -189,8 +240,8 @@ func TestHasStmtSkipDirective(t *testing.T) {
 				X: &dst.Ident{Name: "foo"},
 				Decs: dst.ExprStmtDecorations{
 					NodeDecs: dst.NodeDecs{
-						Start: dst.Decorations{"// ctxweaver:skip"},
-						End:   dst.Decorations{"// ctxweaver:skip"},
+						Start: dst.Decorations{"//ctxweaver:skip"},
+						End:   dst.Decorations{"//ctxweaver:skip"},
 					},
 				},
 			},
@@ -216,7 +267,7 @@ func TestHasStmtSkipDirective(t *testing.T) {
 				Rhs: []dst.Expr{&dst.BasicLit{Kind: 5, Value: "1"}},
 				Decs: dst.AssignStmtDecorations{
 					NodeDecs: dst.NodeDecs{
-						Start: dst.Decorations{"// ctxweaver:skip"},
+						Start: dst.Decorations{"//ctxweaver:skip"},
 					},
 				},
 			},
@@ -231,6 +282,46 @@ func TestHasStmtSkipDirective(t *testing.T) {
 			got := HasStmtSkipDirective(tt.stmt)
 			if got != tt.want {
 				t.Errorf("HasStmtSkipDirective() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsMalformed(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		input string
+		want  bool
+	}{
+		"canonical":                       {input: "//ctxweaver:skip", want: false},
+		"canonical with trailing content": {input: "//ctxweaver:skip legacy code", want: false},
+		"canonical lookalike name":        {input: "//ctxweaver:skipx", want: false},
+		"space after //":                  {input: "// ctxweaver:skip", want: true},
+		"spaces after //":                 {input: "//   ctxweaver:skip", want: true},
+		"tab after //":                    {input: "//\tctxweaver:skip", want: true},
+		"space after the colon":           {input: "//ctxweaver: skip", want: true},
+		"space after // and the colon":    {input: "// ctxweaver: skip", want: true},
+		"tool without a name":             {input: "//ctxweaver:", want: true},
+		"block comment":                   {input: "/*ctxweaver:skip*/", want: true},
+		"block comment with spaces":       {input: "/* ctxweaver:skip */", want: true},
+		"prose mentioning the directive":  {input: "// write ctxweaver:skip to opt out", want: false},
+		"prose in a block comment":        {input: "/* see ctxweaver:skip */", want: false},
+		"other tool":                      {input: "// nolint:errcheck", want: false},
+		"other tool canonical":            {input: "//go:generate foo", want: false},
+		"plain comment":                   {input: "// hello", want: false},
+		"uppercase tool is not ctxweaver": {input: "// CTXWEAVER:skip", want: false},
+		"tool name as a prefix of a word": {input: "// ctxweaverish:skip", want: false},
+		"empty line comment":              {input: "//", want: false},
+		"empty block comment":             {input: "/**/", want: false},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := IsMalformed(tt.input); got != tt.want {
+				t.Errorf("IsMalformed(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}

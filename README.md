@@ -446,6 +446,35 @@ package legacy
 // All functions in this file will be skipped
 ```
 
+Statement-level skip, as a leading or trailing comment, keeps a matching statement as it is:
+
+```go
+func handler(ctx context.Context) {
+    defer newrelic.FromContext(ctx).StartSegment("manually.Named").End() //ctxweaver:skip
+}
+```
+
+Text after the directive is allowed, as in `//ctxweaver:skip legacy code`.
+
+### Directive syntax
+
+A directive must use Go's canonical form `//ctxweaver:name`, the same form as `//go:generate`:
+
+| Comment | Result |
+| --- | --- |
+| `//ctxweaver:skip` | Skips |
+| `// ctxweaver:skip` | Reported, does not skip |
+| `//ctxweaver: skip` | Reported, does not skip |
+| `/*ctxweaver:skip*/` | Reported, does not skip |
+
+A comment is reported when it starts with `ctxweaver:` after `//` or `/*` and optional whitespace, but is not canonical. The report is a warning on stderr with the position:
+
+```text
+warning: /home/me/app/handler.go:7: malformed ctxweaver directive: write //ctxweaver:skip
+```
+
+A warning does not make the run fail. A comment that mentions `ctxweaver:skip` partway through a sentence is not a directive and is not reported.
+
 ## Existing Statement Detection
 
 ctxweaver detects if a matching statement already exists and:

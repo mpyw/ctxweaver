@@ -251,6 +251,7 @@ Future work could generalize this.
    a. Check packages.regexps.only (skip if not matching)
    b. Check packages.regexps.omit (skip if matching)
    c. For each file:
+      - Warn about malformed directives
       - Check file-level skip directive
       - Parse with fresh fset
       - Convert AST → DST
@@ -346,6 +347,7 @@ All filters must pass for a function to be processed.
 - **Write errors**: Report and continue (best effort)
 - **Package load errors**: Report and continue
 - **Invalid regex patterns**: Log warning and skip the pattern (continue processing)
+- **Malformed directives**: Log a warning with the `file:line` position (continue processing). A comment is malformed when it starts with `ctxweaver:` after `//` or `/*` and optional whitespace, but is not the canonical `//ctxweaver:name` form. It has no effect
 - **Pre-hook failures**: Abort processing, no files modified
 - **Post-hook failures**: Log error but files already modified
 
