@@ -41,7 +41,7 @@ The inserted statement is fully customizable via Go templates.
 **Recommended.** ctxweaver is installable directly from GitHub Releases via mise's `github` backend — no extra registry required, and no Go toolchain needed because the binaries are prebuilt:
 
 ```bash
-mise use "github:mpyw/ctxweaver@0.9.4"
+mise use "github:mpyw/ctxweaver@0.10.0"
 ctxweaver ./...
 ```
 
@@ -49,7 +49,7 @@ Run it in the project root. It pins the version in the project's `mise.toml`, so
 
 ```toml
 [tools]
-"github:mpyw/ctxweaver" = "0.9.4"
+"github:mpyw/ctxweaver" = "0.10.0"
 ```
 
 Add `-g` to install it for every project on your machine instead.
