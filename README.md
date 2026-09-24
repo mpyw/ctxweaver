@@ -593,12 +593,6 @@ For Go instrumentation, there are two main approaches: **compile-time instrument
 > [!NOTE]
 > Traditional AOP libraries ([gogap/aop](https://github.com/gogap/aop), [AspectGo](https://github.com/AkihiroSuda/aspectgo)) exist but are largely unmaintained. Go's culture favors explicit code over implicit magic, which is why ctxweaver generates visible source code rather than hiding instrumentation in the build process.
 
-## Related Tools
-
-- [goroutinectx](https://github.com/mpyw/goroutinectx) - Goroutine context propagation linter
-- [zerologlintctx](https://github.com/mpyw/zerologlintctx) - Zerolog context propagation linter
-- [gormreuse](https://github.com/mpyw/gormreuse) - GORM instance reuse linter
-
 ## License
 
 MIT License
