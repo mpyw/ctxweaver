@@ -103,6 +103,9 @@ func reportResults(result *processor.ProcessResult, verbose, dryRun, silent bool
 			fmt.Printf("  %s✓%s %d files processed, %d modified\n", co(internal.ColorGreen), co(internal.ColorReset), result.FilesProcessed, result.FilesModified)
 		}
 	}
+	for _, w := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "%swarning:%s %s\n", ce(internal.ColorYellow), ce(internal.ColorReset), w)
+	}
 	if len(result.Errors) > 0 {
 		fmt.Fprintln(os.Stderr, "Errors:")
 		for _, e := range result.Errors {

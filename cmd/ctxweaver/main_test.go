@@ -223,6 +223,52 @@ func Foo(ctx context.Context) {
 		}
 	})
 
+	t.Run("malformed directive warns without failing", func(t *testing.T) {
+		dir := t.TempDir()
+		configPath := filepath.Join(dir, "ctxweaver.yaml")
+		config := `template: "defer trace({{.Ctx}})"
+imports: []
+packages:
+  patterns:
+    - ./...
+`
+		files := map[string]string{
+			"ctxweaver.yaml": config,
+			"go.mod":         "module test\n\ngo 1.21\n",
+			"test.go": `package test
+
+import "context"
+
+func trace(context.Context) {}
+
+// ctxweaver:skip
+func Foo(ctx context.Context) {
+}
+`,
+		}
+		for name, content := range files {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+				t.Fatalf("failed to write %s: %v", name, err)
+			}
+		}
+
+		cmd := exec.Command(binPath, "-config", configPath, "-silent", "./...")
+		cmd.Dir = dir
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("a malformed directive should not fail the run: %v\n%s", err, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "warning: ") ||
+			!strings.Contains(stderr.String(), "test.go:7: malformed ctxweaver directive: write it as //ctxweaver:name") {
+			t.Errorf("stderr should carry the warning with its position: %q", stderr.String())
+		}
+		content, _ := os.ReadFile(filepath.Join(dir, "test.go"))
+		if !strings.Contains(string(content), "defer trace(ctx)") {
+			t.Errorf("a malformed directive should not skip the function:\n%s", content)
+		}
+	})
+
 	t.Run("pre hook failure", func(t *testing.T) {
 		configPath := filepath.Join(tmpDir, "hook_fail.yaml")
 		config := `template: "defer trace({{.Ctx}})"

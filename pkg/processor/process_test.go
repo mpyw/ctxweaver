@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/mpyw/ctxweaver/internal/directive"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/processor"
 	"github.com/mpyw/ctxweaver/pkg/template"
@@ -972,6 +974,190 @@ func Foo(ctx context.Context) {
 
 		if result.FilesProcessed != 1 {
 			t.Errorf("FilesProcessed = %d, want 1", result.FilesProcessed)
+		}
+	})
+}
+
+// TestProcess_Directives checks that only the canonical //ctxweaver:skip form
+// skips, and that a malformed spelling is reported and has no effect.
+func TestProcess_Directives(t *testing.T) {
+	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
+	registry := config.NewCarrierRegistry(true)
+
+	const trace = "defer trace(ctx)"
+
+	run := func(t *testing.T, files map[string]string, opts ...processor.Option) (*processor.ProcessResult, string) {
+		t.Helper()
+		tmpDir := setupTestModule(t, files)
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+		result, err := processor.New(registry, tmpl, nil, opts...).Process([]string{"./..."})
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+		if len(result.Errors) > 0 {
+			t.Fatalf("unexpected errors: %v", result.Errors)
+		}
+		return result, tmpDir
+	}
+
+	read := func(t *testing.T, dir, name string) string {
+		t.Helper()
+		content, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", name, err)
+		}
+		return string(content)
+	}
+
+	t.Run("canonical forms skip at every level", func(t *testing.T) {
+		result, dir := run(t, map[string]string{
+			"file.go": `//ctxweaver:skip
+
+package main
+
+import "context"
+
+func trace(context.Context) {}
+
+func InSkippedFile(ctx context.Context) {
+}
+`,
+			"funcs.go": `package main
+
+import "context"
+
+// SkippedFunc has other doc comments too.
+//
+//ctxweaver:skip legacy code
+func SkippedFunc(ctx context.Context) {
+}
+
+func Stmt(ctx context.Context) {
+	defer trace(ctx) //ctxweaver:skip
+}
+
+func StmtLeading(ctx context.Context) {
+	//ctxweaver:skip
+	defer trace(ctx)
+}
+
+func Woven(ctx context.Context) {
+}
+`,
+		})
+
+		if len(result.Warnings) > 0 {
+			t.Errorf("unexpected warnings: %v", result.Warnings)
+		}
+		if got := read(t, dir, "file.go"); strings.Contains(got, trace) {
+			t.Errorf("file-level skip should leave the file alone:\n%s", got)
+		}
+		got := read(t, dir, "funcs.go")
+		if strings.Count(got, trace) != 3 {
+			t.Errorf("want the two skipped statements and one woven into Woven only:\n%s", got)
+		}
+		if !strings.Contains(got, "func SkippedFunc(ctx context.Context) {\n}") {
+			t.Errorf("SkippedFunc should be left alone:\n%s", got)
+		}
+	})
+
+	t.Run("malformed forms do not skip and are reported", func(t *testing.T) {
+		result, dir := run(t, map[string]string{
+			"file.go": `// ctxweaver:skip
+
+package main
+
+import "context"
+
+func trace(context.Context) {}
+
+func InFile(ctx context.Context) {
+}
+`,
+			"funcs.go": `package main
+
+import "context"
+
+//ctxweaver: skip
+func SpacedColon(ctx context.Context) {
+}
+
+/*ctxweaver:skip*/
+func Block(ctx context.Context) {
+}
+
+// Prose mentions ctxweaver:skip partway through, which is fine.
+func Prose(ctx context.Context) {
+}
+
+//ctxweaver:skipx
+func Lookalike(ctx context.Context) {
+}
+
+//ctxweaver:Skip
+func Uppercase(ctx context.Context) {
+}
+`,
+		})
+
+		want := []string{
+			filepath.Join(dir, "file.go") + ":1: " + directive.MalformedMessage,
+			filepath.Join(dir, "funcs.go") + ":5: " + directive.MalformedMessage,
+			filepath.Join(dir, "funcs.go") + ":9: " + directive.MalformedMessage,
+			filepath.Join(dir, "funcs.go") + ":21: " + directive.MalformedMessage,
+		}
+		got := slices.Clone(result.Warnings)
+		for i := range got {
+			// macOS temp dirs resolve through /private.
+			got[i] = strings.TrimPrefix(got[i], "/private")
+		}
+		for i := range want {
+			want[i] = strings.TrimPrefix(want[i], "/private")
+		}
+		slices.Sort(got)
+		slices.Sort(want)
+		if !slices.Equal(got, want) {
+			t.Errorf("Warnings =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+
+		if got := read(t, dir, "file.go"); !strings.Contains(got, trace) {
+			t.Errorf("a malformed file-level directive should not skip:\n%s", got)
+		}
+		if got := read(t, dir, "funcs.go"); strings.Count(got, trace) != 5 {
+			t.Errorf("every function should be woven:\n%s", got)
+		}
+	})
+
+	t.Run("statement directive in remove mode", func(t *testing.T) {
+		result, dir := run(t, map[string]string{
+			"main.go": `package main
+
+import "context"
+
+func trace(context.Context) {}
+
+func Kept(ctx context.Context) {
+	defer trace(ctx) //ctxweaver:skip
+}
+
+func Removed(ctx context.Context) {
+	defer trace(ctx) // ctxweaver:skip
+}
+`,
+		}, processor.WithRemove(true))
+
+		if len(result.Warnings) != 1 || !strings.HasSuffix(result.Warnings[0], "main.go:12: "+directive.MalformedMessage) {
+			t.Errorf("Warnings = %v", result.Warnings)
+		}
+		got := read(t, dir, "main.go")
+		if !strings.Contains(got, trace+" //ctxweaver:skip") {
+			t.Errorf("a canonical statement directive should keep the statement:\n%s", got)
+		}
+		if strings.Contains(got, "// ctxweaver:skip") {
+			t.Errorf("a malformed statement directive should not keep the statement:\n%s", got)
 		}
 	})
 }

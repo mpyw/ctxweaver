@@ -17,7 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Directives
 
-- `//ctxweaver:skip` - Skip processing for a function or entire file
+- `//ctxweaver:skip` - Skip processing for a file, a function, or a matching statement
+
+Only `//ctxweaver:skip` (line comment, lowercase name, no spaces) is a directive. Any other comment starting with `ctxweaver:` after `//` or `/*` has no effect, and `Process` returns a warning with its position in `ProcessResult.Warnings`. A warning does not fail the run.
 
 ## Architecture
 
