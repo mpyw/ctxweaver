@@ -126,9 +126,9 @@ func processDirectiveWarnings(fset *token.FileSet, file *ast.File) []string {
 	var warnings []string
 	for _, group := range file.Comments {
 		for _, c := range group.List {
-			if message, ok := directive.Malformed(c.Text); ok {
+			if directive.Malformed(c.Text) {
 				pos := fset.Position(c.Slash)
-				warnings = append(warnings, fmt.Sprintf("%s:%d: %s", pos.Filename, pos.Line, message))
+				warnings = append(warnings, fmt.Sprintf("%s:%d: %s", pos.Filename, pos.Line, directive.MalformedMessage))
 			}
 		}
 	}

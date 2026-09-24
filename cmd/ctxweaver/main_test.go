@@ -260,7 +260,7 @@ func Foo(ctx context.Context) {
 			t.Fatalf("a malformed directive should not fail the run: %v\n%s", err, stderr.String())
 		}
 		if !strings.Contains(stderr.String(), "warning: ") ||
-			!strings.Contains(stderr.String(), "test.go:7: malformed ctxweaver directive: write //ctxweaver:skip") {
+			!strings.Contains(stderr.String(), "test.go:7: malformed ctxweaver directive: write it as //ctxweaver:name") {
 			t.Errorf("stderr should carry the warning with its position: %q", stderr.String())
 		}
 		content, _ := os.ReadFile(filepath.Join(dir, "test.go"))

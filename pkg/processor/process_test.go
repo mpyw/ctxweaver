@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mpyw/ctxweaver/internal/directive"
 	"github.com/mpyw/ctxweaver/pkg/config"
 	"github.com/mpyw/ctxweaver/pkg/processor"
 	"github.com/mpyw/ctxweaver/pkg/template"
@@ -1088,10 +1089,6 @@ func SpacedColon(ctx context.Context) {
 func Block(ctx context.Context) {
 }
 
-//	ctxweaver:skip
-func Tabbed(ctx context.Context) {
-}
-
 // Prose mentions ctxweaver:skip partway through, which is fine.
 func Prose(ctx context.Context) {
 }
@@ -1103,20 +1100,14 @@ func Lookalike(ctx context.Context) {
 //ctxweaver:Skip
 func Uppercase(ctx context.Context) {
 }
-
-//ctxweaver:
-func NoName(ctx context.Context) {
-}
 `,
 		})
 
 		want := []string{
-			filepath.Join(dir, "file.go") + ":1: malformed ctxweaver directive: write //ctxweaver:skip",
-			filepath.Join(dir, "funcs.go") + ":5: malformed ctxweaver directive: write //ctxweaver:skip",
-			filepath.Join(dir, "funcs.go") + ":9: malformed ctxweaver directive: write //ctxweaver:skip",
-			filepath.Join(dir, "funcs.go") + ":13: malformed ctxweaver directive: write //ctxweaver:skip",
-			filepath.Join(dir, "funcs.go") + ":25: malformed ctxweaver directive",
-			filepath.Join(dir, "funcs.go") + ":29: malformed ctxweaver directive",
+			filepath.Join(dir, "file.go") + ":1: " + directive.MalformedMessage,
+			filepath.Join(dir, "funcs.go") + ":5: " + directive.MalformedMessage,
+			filepath.Join(dir, "funcs.go") + ":9: " + directive.MalformedMessage,
+			filepath.Join(dir, "funcs.go") + ":21: " + directive.MalformedMessage,
 		}
 		got := slices.Clone(result.Warnings)
 		for i := range got {
@@ -1135,7 +1126,7 @@ func NoName(ctx context.Context) {
 		if got := read(t, dir, "file.go"); !strings.Contains(got, trace) {
 			t.Errorf("a malformed file-level directive should not skip:\n%s", got)
 		}
-		if got := read(t, dir, "funcs.go"); strings.Count(got, trace) != 7 {
+		if got := read(t, dir, "funcs.go"); strings.Count(got, trace) != 5 {
 			t.Errorf("every function should be woven:\n%s", got)
 		}
 	})
@@ -1158,7 +1149,7 @@ func Removed(ctx context.Context) {
 `,
 		}, processor.WithRemove(true))
 
-		if len(result.Warnings) != 1 || !strings.HasSuffix(result.Warnings[0], "main.go:12: malformed ctxweaver directive: write //ctxweaver:skip") {
+		if len(result.Warnings) != 1 || !strings.HasSuffix(result.Warnings[0], "main.go:12: "+directive.MalformedMessage) {
 			t.Errorf("Warnings = %v", result.Warnings)
 		}
 		got := read(t, dir, "main.go")

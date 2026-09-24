@@ -26,46 +26,28 @@ func isSkipComment(text string) bool {
 	return ok && d.Tool == directiveTool && d.Name == skipName
 }
 
+// MalformedMessage is the warning for a comment that [Malformed] matches.
+const MalformedMessage = "malformed ctxweaver directive: write it as //ctxweaver:name"
+
 // Malformed reports whether a comment is addressed to ctxweaver but is not a
-// valid directive, and returns the warning for it.
+// valid directive.
 //
 // A comment is addressed to ctxweaver when its body, after "//" or "/*",
-// starts with "ctxweaver:" once optional whitespace is skipped. It is a
-// directive when [ast.ParseDirective] accepts it with the tool "ctxweaver". So
-// a space or tab after "//", a space after the colon, a block comment, a name
-// that is missing or does not start with a lowercase letter or digit are all
-// malformed. A lookalike name such as "skipx" is valid syntax and not
-// malformed. Prose that mentions "ctxweaver:skip" partway through a sentence
-// is not addressed.
-//
-// The warning suggests "//ctxweaver:<name>" only when that rewritten text is
-// itself a directive. The name is never changed or guessed.
-func Malformed(text string) (string, bool) {
+// starts with "ctxweaver:" once optional whitespace is skipped. It is valid
+// when [ast.ParseDirective] accepts it with the tool "ctxweaver". Prose that
+// mentions "ctxweaver:skip" partway through a sentence is not addressed.
+func Malformed(text string) bool {
 	body, ok := strings.CutPrefix(text, "//")
 	if !ok {
 		if body, ok = strings.CutPrefix(text, "/*"); !ok {
-			return "", false
+			return false
 		}
-		body = strings.TrimSuffix(body, "*/")
 	}
-	rest, ok := strings.CutPrefix(strings.TrimLeft(body, " \t"), directiveTool+":")
-	if !ok {
-		return "", false
+	if !strings.HasPrefix(strings.TrimLeft(body, " \t"), directiveTool+":") {
+		return false
 	}
-	if d, ok := ast.ParseDirective(token.NoPos, text); ok && d.Tool == directiveTool {
-		return "", false
-	}
-
-	const message = "malformed " + directiveTool + " directive"
-	fields := strings.Fields(rest)
-	if len(fields) == 0 {
-		return message, true
-	}
-	suggestion := "//" + directiveTool + ":" + fields[0]
-	if d, ok := ast.ParseDirective(token.NoPos, suggestion); !ok || d.Tool != directiveTool {
-		return message, true
-	}
-	return message + ": write " + suggestion, true
+	d, ok := ast.ParseDirective(token.NoPos, text)
+	return !ok || d.Tool != directiveTool
 }
 
 // HasSkipDirective checks if node decorations contain a skip directive.

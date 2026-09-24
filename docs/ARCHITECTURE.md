@@ -347,7 +347,7 @@ All filters must pass for a function to be processed.
 - **Write errors**: Report and continue (best effort)
 - **Package load errors**: Report and continue
 - **Invalid regex patterns**: Log warning and skip the pattern (continue processing)
-- **Malformed directives**: Log a warning with the `file:line` position (continue processing). A comment is malformed when it starts with `ctxweaver:` after `//` or `/*` and optional whitespace, but is not the canonical `//ctxweaver:name` form (lowercase name). It has no effect. The warning suggests `//ctxweaver:<name>` only when that rewrite is itself valid
+- **Malformed directives**: Only `//ctxweaver:skip` (line comment, lowercase name, no spaces) is a directive. Any other comment starting with `ctxweaver:` after `//` or `/*` has no effect and gets a warning with its `file:line` position. Processing continues
 - **Pre-hook failures**: Abort processing, no files modified
 - **Post-hook failures**: Log error but files already modified
 
