@@ -272,7 +272,7 @@ func TestMatchNodes_EdgeCases(t *testing.T) {
 func TestMatchFieldLists(t *testing.T) {
 	t.Parallel()
 
-	c := NewMatcher()
+	c := newMatcher()
 
 	t.Run("both nil", func(t *testing.T) {
 		t.Parallel()
@@ -455,7 +455,7 @@ func TestMatchNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 
 	// Test the special case: SelectorExpr matches Ident with Path set
 	// This happens when NewDecoratorFromPackage resolves `pkg.Func` to `Func` with Path="pkg"
-	c := NewMatcher()
+	c := newMatcher()
 
 	t.Run("SelectorExpr matches Ident with Path (selA.Sel.Name == identB.Name)", func(t *testing.T) {
 		t.Parallel()
@@ -473,7 +473,7 @@ func TestMatchNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 		}
 
 		// They should match because selA.Sel.Name == identB.Name
-		if !c.Match(selExpr, identWithPath, "test", false) {
+		if !c.match(selExpr, identWithPath, "test", false) {
 			t.Error("expected SelectorExpr to match Ident with Path")
 		}
 	})
@@ -494,7 +494,7 @@ func TestMatchNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 		}
 
 		// They should match because identA.Name == selB.Sel.Name
-		if !c.Match(identWithPath, selExpr, "test", false) {
+		if !c.match(identWithPath, selExpr, "test", false) {
 			t.Error("expected Ident with Path to match SelectorExpr")
 		}
 	})
@@ -513,7 +513,7 @@ func TestMatchNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 			Path: "", // No Path set
 		}
 
-		if c.Match(selExpr, identWithoutPath, "test", false) {
+		if c.match(selExpr, identWithoutPath, "test", false) {
 			t.Error("expected SelectorExpr to NOT match Ident without Path")
 		}
 	})
@@ -531,7 +531,7 @@ func TestMatchNodes_SelectorExprVsIdentWithPath(t *testing.T) {
 			Path: "github.com/example/pkg",
 		}
 
-		if c.Match(selExpr, identWithPath, "test", false) {
+		if c.match(selExpr, identWithPath, "test", false) {
 			t.Error("expected different names to NOT match")
 		}
 	})
