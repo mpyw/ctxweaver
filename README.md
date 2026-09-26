@@ -540,7 +540,7 @@ Use the `-no-hooks` flag to skip hooks (useful for CI or when running ctxweaver 
 ## Documentation
 
 - [Architecture](./docs/ARCHITECTURE.md) - Technical specification and design decisions
-- [CLAUDE.md](./CLAUDE.md) - AI assistant guidance for development
+- [AGENTS.md](./AGENTS.md) - Repository instructions for contributors and coding agents
 
 ## Development
 
