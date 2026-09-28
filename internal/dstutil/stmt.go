@@ -3,6 +3,7 @@ package dstutil
 import (
 	"go/parser"
 	"go/token"
+	"slices"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
@@ -40,11 +41,7 @@ func UpdateStatements(body *dst.BlockStmt, index, count int, stmtStr string) boo
 	stmts[len(stmts)-1].Decorations().After = body.List[index+count-1].Decorations().After
 
 	// Replace: body.List[:index] + stmts + body.List[index+count:]
-	newList := make([]dst.Stmt, 0, len(body.List)-count+len(stmts))
-	newList = append(newList, body.List[:index]...)
-	newList = append(newList, stmts...)
-	newList = append(newList, body.List[index+count:]...)
-	body.List = newList
+	body.List = slices.Concat(body.List[:index], stmts, body.List[index+count:])
 
 	return true
 }
@@ -55,7 +52,7 @@ func RemoveStatements(body *dst.BlockStmt, index, count int) bool {
 		return false
 	}
 
-	body.List = append(body.List[:index], body.List[index+count:]...)
+	body.List = slices.Delete(body.List, index, index+count)
 	return true
 }
 
