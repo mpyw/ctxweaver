@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -929,3 +930,220 @@ func Foo(ctx context.Context) {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
+
+// TestCLI_LineDirectives runs the built binary on modules with //line
+// directives. A directive must not change which file is read, filtered or
+// written, and a directive in a rewritten file must stay a directive.
+func TestCLI_LineDirectives(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	binPath := filepath.Join(t.TempDir(), "ctxweaver")
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build: %v\n%s", err, out)
+	}
+
+	const config = "template: |\n  _ = {{.Ctx}}\npackages:\n  patterns:\n    - ./...\n"
+	const goMod = "module example.com/repro\n\ngo 1.22\n"
+	// The modules have no dependencies, so go needs no network.
+	env := append(os.Environ(), "GOTOOLCHAIN=local", "GOPROXY=off", "GOFLAGS=")
+
+	// setup writes the files into a new module and returns its real path.
+	// macOS temp dirs are symlinks, and the tool prints resolved paths.
+	setup := func(t *testing.T, files map[string]string) string {
+		t.Helper()
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		files["go.mod"] = goMod
+		files["ctxweaver.yaml"] = config
+		for name, content := range files {
+			path := filepath.Join(dir, filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return dir
+	}
+
+	// weave runs the binary and returns its stdout.
+	weave := func(t *testing.T, dir string) string {
+		t.Helper()
+		cmd := exec.Command(binPath, "-verbose", "-no-hooks")
+		cmd.Dir = dir
+		cmd.Env = env
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("ctxweaver failed: %v\n%s%s", err, stdout.String(), stderr.String())
+		}
+		if stderr.Len() > 0 {
+			t.Errorf("unexpected stderr: %s", stderr.String())
+		}
+		return stdout.String()
+	}
+
+	// files returns every file in dir with its content, keyed by slash path.
+	files := func(t *testing.T, dir string) map[string]string {
+		t.Helper()
+		got := map[string]string{}
+		err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(dir, path)
+			got[filepath.ToSlash(rel)] = string(content)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	checkFiles := func(t *testing.T, dir string, want map[string]string) {
+		t.Helper()
+		want["go.mod"] = goMod
+		want["ctxweaver.yaml"] = config
+		got := files(t, dir)
+		for name, content := range got {
+			if w, ok := want[name]; !ok {
+				t.Errorf("unexpected file %s:\n%s", name, content)
+			} else if content != w {
+				t.Errorf("%s =\n%s\nwant\n%s", name, content, w)
+			}
+		}
+		for name := range want {
+			if _, ok := got[name]; !ok {
+				t.Errorf("missing file %s", name)
+			}
+		}
+	}
+
+	// summary is the stdout of a run that processed the given number of
+	// files and modified only p/a.go.
+	summary := func(dir string, processed int) string {
+		return "▶ ctxweaver weaving ./...\n" +
+			"modified: " + filepath.Join(dir, "p", "a.go") + "\n" +
+			fmt.Sprintf("  Files processed: %d\n", processed) +
+			"  Files modified: 1\n"
+	}
+
+	// goRun runs the module's main package and returns its output.
+	goRun := func(t *testing.T, dir string) string {
+		t.Helper()
+		cmd := exec.Command("go", "run", ".")
+		cmd.Dir = dir
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("go run failed: %v\n%s", err, out)
+		}
+		return string(out)
+	}
+
+	t.Run("directive before package clause", func(t *testing.T) {
+		const body = `package p
+
+import "context"
+
+func F(ctx context.Context) {
+	println("x")
+}
+`
+		const woven = `package p
+
+import "context"
+
+func F(ctx context.Context) {
+	_ = ctx
+
+	println("x")
+}
+`
+		tests := map[string]string{
+			"control":                         "",
+			"file name in directive":          "//line fake.tmpl:1\n",
+			"test file name in directive":     "//line gen_test.go:1\n",
+			"testdata file name in directive": "//line /src/testdata/gen.go:1\n",
+		}
+		for name, directive := range tests {
+			t.Run(name, func(t *testing.T) {
+				dir := setup(t, map[string]string{"p/a.go": directive + body})
+
+				if got, want := weave(t, dir), summary(dir, 1); got != want {
+					t.Errorf("stdout =\n%s\nwant\n%s", got, want)
+				}
+				checkFiles(t, dir, map[string]string{"p/a.go": directive + woven})
+			})
+		}
+	})
+
+	t.Run("directive in function body", func(t *testing.T) {
+		const mainGo = `package main
+
+import "example.com/repro/p"
+
+func main() { println(p.H()) }
+`
+		source := func(directive string) string {
+			return `package p
+
+import (
+	"context"
+	"runtime"
+)
+
+func F(ctx context.Context) {` + weaveMark + `
+	println("x")
+}
+
+func H() int {
+` + directive + `	_, _, line, _ := runtime.Caller(0)
+	return line
+}
+`
+		}
+		tests := map[string]struct {
+			directive string
+			before    string // go run output of the original program
+			after     string // go run output of the rewritten program
+		}{
+			"control":   {directive: "", before: "13\n", after: "15\n"},
+			"directive": {directive: "//line fake.tmpl:100\n", before: "100\n", after: "100\n"},
+		}
+		for name, tt := range tests {
+			t.Run(name, func(t *testing.T) {
+				original := strings.Replace(source(tt.directive), weaveMark, "", 1)
+				dir := setup(t, map[string]string{"main.go": mainGo, "p/a.go": original})
+				if got := goRun(t, dir); got != tt.before {
+					t.Fatalf("original program printed %q, want %q", got, tt.before)
+				}
+
+				// main.go is processed too, and has nothing to weave.
+				if got, want := weave(t, dir), summary(dir, 2); got != want {
+					t.Errorf("stdout =\n%s\nwant\n%s", got, want)
+				}
+				woven := strings.Replace(source(tt.directive), weaveMark, "\n\t_ = ctx\n", 1)
+				checkFiles(t, dir, map[string]string{"main.go": mainGo, "p/a.go": woven})
+				if got := goRun(t, dir); got != tt.after {
+					t.Errorf("rewritten program printed %q, want %q", got, tt.after)
+				}
+			})
+		}
+	})
+}
+
+// weaveMark marks where a test source gets the woven statement.
+const weaveMark = "<weave>"
