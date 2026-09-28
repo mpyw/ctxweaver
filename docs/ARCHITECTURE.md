@@ -251,7 +251,7 @@ Future work could generalize this.
    a. Check packages.regexps.only (skip if not matching)
    b. Check packages.regexps.omit (skip if matching)
    c. For each file:
-      - Warn about malformed directives
+      - Warn about directives ctxweaver does not read; leave such a file as it is
       - Check file-level skip directive
       - Parse with fresh fset
       - Convert AST → DST
@@ -347,7 +347,7 @@ All filters must pass for a function to be processed.
 - **Write errors**: Report and continue (best effort)
 - **Package load errors**: Report and continue
 - **Invalid regex patterns**: Log warning and skip the pattern (continue processing)
-- **Malformed directives**: Only `//ctxweaver:skip` (line comment, lowercase name, no spaces) is a directive. Any other comment starting with `ctxweaver:` after `//` or `/*` has no effect and gets a warning with its `file:line` position. Processing continues
+- **Directives ctxweaver does not read**: Only `//ctxweaver:skip` (line comment, lowercase name, no spaces) is a directive, optionally followed by a reason after `//` or ` - `. A malformed spelling, an unknown name, free text after `skip`, or a `ctxweaver:` directive after another comment in the same comment gets a warning with its `file:line` position. The file holding it is not rewritten, since ctxweaver cannot tell what it was meant to do, and is counted in the summary. Other files are processed, and the exit status is not affected
 - **Pre-hook failures**: Abort processing, no files modified
 - **Post-hook failures**: Log error but files already modified
 

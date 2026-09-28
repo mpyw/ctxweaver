@@ -177,7 +177,10 @@ func New(registry *config.CarrierRegistry, tmpl *template.Template, importPaths 
 type ProcessResult struct {
 	FilesProcessed int
 	FilesModified  int
-	Errors         []error
+	// FilesHeld counts the files left as they are because they hold a
+	// ctxweaver directive with a warning.
+	FilesHeld int
+	Errors    []error
 	// Warnings are problems that do not fail the run, such as a malformed
 	// directive. Each one starts with its file:line position.
 	Warnings []string

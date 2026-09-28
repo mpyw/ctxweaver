@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mpyw/ctxweaver/pkg/processor"
 )
 
 func TestIsFlagPassed(t *testing.T) {
@@ -265,8 +269,8 @@ func Foo(ctx context.Context) {
 			t.Errorf("stderr should carry the warning with its position: %q", stderr.String())
 		}
 		content, _ := os.ReadFile(filepath.Join(dir, "test.go"))
-		if !strings.Contains(string(content), "defer trace(ctx)") {
-			t.Errorf("a malformed directive should not skip the function:\n%s", content)
+		if string(content) != files["test.go"] {
+			t.Errorf("a file with a malformed directive should be left as it is:\n%s", content)
 		}
 	})
 
@@ -295,6 +299,41 @@ hooks:
 			t.Errorf("should mention pre hook failed: %s", out)
 		}
 	})
+}
+
+// TestReportResults checks the summary, which counts the files left as they
+// are because of a directive warning only when there are any.
+func TestReportResults(t *testing.T) {
+	tests := map[string]struct {
+		held    int
+		verbose bool
+		want    string
+	}{
+		"none":         {held: 0, want: "  ✓ 3 files processed, 1 modified\n"},
+		"held":         {held: 2, want: "  ✓ 3 files processed, 1 modified, 2 not rewritten due to directive warnings\n"},
+		"none verbose": {held: 0, verbose: true, want: "  Files processed: 3\n  Files modified: 1\n"},
+		"held verbose": {held: 2, verbose: true, want: "  Files processed: 3\n  Files modified: 1\n  Files not rewritten due to directive warnings: 2\n"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stdout := os.Stdout
+			os.Stdout = w
+			err = reportResults(&processor.ProcessResult{FilesProcessed: 3, FilesModified: 1, FilesHeld: tt.held}, tt.verbose, false, false)
+			os.Stdout = stdout
+			_ = w.Close()
+			out, _ := io.ReadAll(r)
+			if err != nil {
+				t.Errorf("reportResults() error = %v", err)
+			}
+			if string(out) != tt.want {
+				t.Errorf("stdout =\n%s\nwant\n%s", out, tt.want)
+			}
+		})
+	}
 }
 
 func TestRun(t *testing.T) {
@@ -1147,3 +1186,187 @@ func H() int {
 
 // weaveMark marks where a test source gets the woven statement.
 const weaveMark = "<weave>"
+
+// TestCLI_DirectiveForms runs the built binary, weaving and removing, on each
+// way of writing a directive, above a function and after a statement. A form
+// ctxweaver does not read must leave its file byte for byte as it was.
+func TestCLI_DirectiveForms(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	binPath := filepath.Join(t.TempDir(), "ctxweaver")
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build: %v\n%s", err, out)
+	}
+
+	const config = "template: |\n  defer trace({{.Ctx}}, {{.FuncName | quote}})()\npackages:\n  patterns:\n    - ./...\n"
+	const goMod = "module example.com/repro\n\ngo 1.22\n"
+	const traceGo = "package p\n\nfunc trace(_ any, name string) func() { return func() {} }\n"
+	// The module has no dependencies, so go needs no network.
+	env := append(os.Environ(), "GOTOOLCHAIN=local", "GOPROXY=off", "GOFLAGS=")
+
+	// Each source has a stale statement, which weaving updates and removing
+	// deletes, unless a directive keeps it.
+	funcLevel := func(comment string) string {
+		return "package p\n\nimport \"context\"\n\n" + comment + "\nfunc F(ctx context.Context) {\n\tdefer trace(ctx, \"old\")()\n}\n"
+	}
+	stmtLevel := func(comment string) string {
+		return "package p\n\nimport \"context\"\n\nfunc F(ctx context.Context) {\n\tdefer trace(ctx, \"old\")() " + comment + "\n}\n"
+	}
+	const (
+		funcLine = 5 // the line of the comment in funcLevel
+		stmtLine = 6 // the line of the comment in stmtLevel
+	)
+
+	const (
+		skip      = ""
+		free      = "ctxweaver:skip takes no argument; write a reason after //"
+		hidden    = "ctxweaver directive after another comment: write it as its own //ctxweaver:name comment"
+		malformed = "malformed ctxweaver directive: write it as //ctxweaver:name"
+	)
+	tests := map[string]struct {
+		comment string
+		warning string // skip for a directive that is read
+		control bool   // no directive: the statement is updated or removed
+	}{
+		"canonical":                       {comment: "//ctxweaver:skip", warning: skip},
+		"reason after //":                 {comment: "//ctxweaver:skip // reason", warning: skip},
+		"reason after // without a space": {comment: "//ctxweaver:skip //reason", warning: skip},
+		"reason glued to the name":        {comment: "//ctxweaver:skip//reason", warning: skip},
+		"reason after a dash":             {comment: "//ctxweaver:skip - reason", warning: skip},
+		"free text":                       {comment: "//ctxweaver:skip legacy code", warning: free},
+		"misspelled":                      {comment: "//ctxweaver:skp", warning: "unknown ctxweaver directive: ctxweaver:skp"},
+		"hyphenated name":                 {comment: "//ctxweaver:skip-legacy", warning: "unknown ctxweaver directive: ctxweaver:skip-legacy"},
+		"after another directive":         {comment: "//nolint:foo //ctxweaver:skip", warning: hidden},
+		"space after //":                  {comment: "// ctxweaver:skip", warning: malformed},
+		"block comment":                   {comment: "/*ctxweaver:skip*/", warning: malformed},
+		"control":                         {comment: "// nothing", control: true},
+	}
+
+	levels := map[string]struct {
+		source  func(string) string
+		line    int
+		woven   func(string) string // the control, woven
+		removed func(string) string // the control, removed
+	}{
+		"function": {
+			source: funcLevel,
+			line:   funcLine,
+			woven: func(comment string) string {
+				return strings.Replace(funcLevel(comment), `"old"`, `"p.F"`, 1)
+			},
+			removed: func(comment string) string {
+				return "package p\n\nimport \"context\"\n\n" + comment + "\nfunc F(ctx context.Context) {}\n"
+			},
+		},
+		"statement": {
+			source: stmtLevel,
+			line:   stmtLine,
+			woven: func(string) string {
+				// The trailing comment goes with the replaced statement.
+				return "package p\n\nimport \"context\"\n\nfunc F(ctx context.Context) {\n\tdefer trace(ctx, \"p.F\")()\n}\n"
+			},
+			removed: func(string) string {
+				return "package p\n\nimport \"context\"\n\nfunc F(ctx context.Context) {}\n"
+			},
+		},
+	}
+
+	for levelName, level := range levels {
+		for name, tt := range tests {
+			for _, remove := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/remove=%v", levelName, name, remove), func(t *testing.T) {
+					t.Parallel()
+					dir, err := filepath.EvalSymlinks(t.TempDir())
+					if err != nil {
+						t.Fatal(err)
+					}
+					src := level.source(tt.comment)
+					input := map[string]string{
+						"go.mod":         goMod,
+						"ctxweaver.yaml": config,
+						"p/trace.go":     traceGo,
+						"p/a.go":         src,
+					}
+					for name, content := range input {
+						path := filepath.Join(dir, filepath.FromSlash(name))
+						if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+							t.Fatal(err)
+						}
+						if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+							t.Fatal(err)
+						}
+					}
+
+					args := []string{"-no-hooks"}
+					action := "weaving"
+					if remove {
+						args = append(args, "-remove")
+						action = "removing"
+					}
+					cmd := exec.Command(binPath, append(args, "./...")...)
+					cmd.Dir = dir
+					cmd.Env = env
+					var stdout, stderr bytes.Buffer
+					cmd.Stdout = &stdout
+					cmd.Stderr = &stderr
+					if err := cmd.Run(); err != nil {
+						t.Fatalf("ctxweaver failed: %v\n%s%s", err, stdout.String(), stderr.String())
+					}
+
+					wantA := src
+					summary := "2 files processed, 0 modified"
+					wantStderr := ""
+					switch {
+					case tt.control && remove:
+						wantA = level.removed(tt.comment)
+						summary = "2 files processed, 1 modified"
+					case tt.control:
+						wantA = level.woven(tt.comment)
+						summary = "2 files processed, 1 modified"
+					case tt.warning != skip:
+						summary += ", 1 not rewritten due to directive warnings"
+						wantStderr = fmt.Sprintf("warning: %s:%d: %s\n", filepath.Join(dir, "p", "a.go"), level.line, tt.warning)
+					}
+					wantStdout := "▶ ctxweaver " + action + " ./...\n  ✓ " + summary + "\n"
+					if got := stdout.String(); got != wantStdout {
+						t.Errorf("stdout =\n%s\nwant\n%s", got, wantStdout)
+					}
+					if got := stderr.String(); got != wantStderr {
+						t.Errorf("stderr =\n%s\nwant\n%s", got, wantStderr)
+					}
+
+					want := maps.Clone(input)
+					want["p/a.go"] = wantA
+					got := map[string]string{}
+					err = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+						if err != nil || d.IsDir() {
+							return err
+						}
+						content, err := os.ReadFile(path)
+						rel, _ := filepath.Rel(dir, path)
+						got[filepath.ToSlash(rel)] = string(content)
+						return err
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !maps.Equal(got, want) {
+						for name := range want {
+							if got[name] != want[name] {
+								t.Errorf("%s =\n%s\nwant\n%s", name, got[name], want[name])
+							}
+						}
+						for name := range got {
+							if _, ok := want[name]; !ok {
+								t.Errorf("unexpected file %s", name)
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+}

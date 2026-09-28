@@ -99,8 +99,15 @@ func reportResults(result *processor.ProcessResult, verbose, dryRun, silent bool
 		if verbose || dryRun {
 			fmt.Printf("  Files processed: %d\n", result.FilesProcessed)
 			fmt.Printf("  Files modified: %d\n", result.FilesModified)
+			if result.FilesHeld > 0 {
+				fmt.Printf("  Files not rewritten due to directive warnings: %d\n", result.FilesHeld)
+			}
 		} else {
-			fmt.Printf("  %s✓%s %d files processed, %d modified\n", co(internal.ColorGreen), co(internal.ColorReset), result.FilesProcessed, result.FilesModified)
+			held := ""
+			if result.FilesHeld > 0 {
+				held = fmt.Sprintf(", %d not rewritten due to directive warnings", result.FilesHeld)
+			}
+			fmt.Printf("  %s✓%s %d files processed, %d modified%s\n", co(internal.ColorGreen), co(internal.ColorReset), result.FilesProcessed, result.FilesModified, held)
 		}
 	}
 	for _, w := range result.Warnings {

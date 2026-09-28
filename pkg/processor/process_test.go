@@ -2,6 +2,7 @@ package processor_test
 
 import (
 	"bytes"
+	"fmt"
 	"go/format"
 	"os"
 	"path/filepath"
@@ -1032,7 +1033,7 @@ import "context"
 
 // SkippedFunc has other doc comments too.
 //
-//ctxweaver:skip legacy code
+//ctxweaver:skip // legacy code
 func SkippedFunc(ctx context.Context) {
 }
 
@@ -1043,6 +1044,14 @@ func Stmt(ctx context.Context) {
 func StmtLeading(ctx context.Context) {
 	//ctxweaver:skip
 	defer trace(ctx)
+}
+
+//ctxweaver:skip//glued reason
+func GluedReason(ctx context.Context) {
+}
+
+//ctxweaver:skip - dash reason
+func DashReason(ctx context.Context) {
 }
 
 func Woven(ctx context.Context) {
@@ -1060,13 +1069,16 @@ func Woven(ctx context.Context) {
 		if strings.Count(got, trace) != 3 {
 			t.Errorf("want the two skipped statements and one woven into Woven only:\n%s", got)
 		}
+		if result.FilesHeld != 0 {
+			t.Errorf("FilesHeld = %d, want 0", result.FilesHeld)
+		}
 		if !strings.Contains(got, "func SkippedFunc(ctx context.Context) {\n}") {
 			t.Errorf("SkippedFunc should be left alone:\n%s", got)
 		}
 	})
 
-	t.Run("malformed forms do not skip and are reported", func(t *testing.T) {
-		result, dir := run(t, map[string]string{
+	t.Run("unread directives are reported and hold the file", func(t *testing.T) {
+		files := map[string]string{
 			"file.go": `// ctxweaver:skip
 
 package main
@@ -1101,34 +1113,63 @@ func Lookalike(ctx context.Context) {
 //ctxweaver:Skip
 func Uppercase(ctx context.Context) {
 }
+
+//ctxweaver:skip legacy code
+func FreeText(ctx context.Context) {
+}
+
+//nolint:foo //ctxweaver:skip
+func Hidden(ctx context.Context) {
+}
 `,
-		})
+			"clean.go": `package main
 
-		want := []string{
-			filepath.Join(dir, "file.go") + ":1: " + directive.MalformedMessage,
-			filepath.Join(dir, "funcs.go") + ":5: " + directive.MalformedMessage,
-			filepath.Join(dir, "funcs.go") + ":9: " + directive.MalformedMessage,
-			filepath.Join(dir, "funcs.go") + ":21: " + directive.MalformedMessage,
-		}
-		got := slices.Clone(result.Warnings)
-		for i := range got {
-			// macOS temp dirs resolve through /private.
-			got[i] = strings.TrimPrefix(got[i], "/private")
-		}
-		for i := range want {
-			want[i] = strings.TrimPrefix(want[i], "/private")
-		}
-		slices.Sort(got)
-		slices.Sort(want)
-		if !slices.Equal(got, want) {
-			t.Errorf("Warnings =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-		}
+import "context"
 
-		if got := read(t, dir, "file.go"); !strings.Contains(got, trace) {
-			t.Errorf("a malformed file-level directive should not skip:\n%s", got)
+// Prose mentions ctxweaver:skip partway through, which is fine.
+func Clean(ctx context.Context) {
+}
+`,
 		}
-		if got := read(t, dir, "funcs.go"); strings.Count(got, trace) != 5 {
-			t.Errorf("every function should be woven:\n%s", got)
+		for _, remove := range []bool{false, true} {
+			t.Run(fmt.Sprintf("remove=%v", remove), func(t *testing.T) {
+				result, dir := run(t, files, processor.WithRemove(remove))
+
+				want := []string{
+					filepath.Join(dir, "file.go") + ":1: " + directive.MalformedMessage,
+					filepath.Join(dir, "funcs.go") + ":5: " + directive.MalformedMessage,
+					filepath.Join(dir, "funcs.go") + ":9: " + directive.MalformedMessage,
+					filepath.Join(dir, "funcs.go") + ":17: " + directive.UnknownMessage + "skipx",
+					filepath.Join(dir, "funcs.go") + ":21: " + directive.MalformedMessage,
+					filepath.Join(dir, "funcs.go") + ":25: " + directive.SkipArgMessage,
+					filepath.Join(dir, "funcs.go") + ":29: " + directive.HiddenMessage,
+				}
+				got := slices.Clone(result.Warnings)
+				for i := range got {
+					// macOS temp dirs resolve through /private.
+					got[i] = strings.TrimPrefix(got[i], "/private")
+				}
+				for i := range want {
+					want[i] = strings.TrimPrefix(want[i], "/private")
+				}
+				slices.Sort(got)
+				slices.Sort(want)
+				if !slices.Equal(got, want) {
+					t.Errorf("Warnings =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+				}
+				if result.FilesHeld != 2 {
+					t.Errorf("FilesHeld = %d, want 2", result.FilesHeld)
+				}
+
+				for _, name := range []string{"file.go", "funcs.go"} {
+					if got := read(t, dir, name); got != files[name] {
+						t.Errorf("%s should be left as it is:\n%s", name, got)
+					}
+				}
+				if got := read(t, dir, "clean.go"); strings.Contains(got, trace) == remove {
+					t.Errorf("clean.go should still be processed:\n%s", got)
+				}
+			})
 		}
 	})
 
@@ -1144,21 +1185,49 @@ func Kept(ctx context.Context) {
 	defer trace(ctx) //ctxweaver:skip
 }
 
+func KeptWithReason(ctx context.Context) {
+	defer trace(ctx) //ctxweaver:skip // reason
+}
+
 func Removed(ctx context.Context) {
-	defer trace(ctx) // ctxweaver:skip
+	defer trace(ctx) // reason
 }
 `,
 		}, processor.WithRemove(true))
 
-		if len(result.Warnings) != 1 || !strings.HasSuffix(result.Warnings[0], "main.go:12: "+directive.MalformedMessage) {
-			t.Errorf("Warnings = %v", result.Warnings)
+		if len(result.Warnings) != 0 || result.FilesHeld != 0 {
+			t.Errorf("Warnings = %v, FilesHeld = %d", result.Warnings, result.FilesHeld)
 		}
 		got := read(t, dir, "main.go")
-		if !strings.Contains(got, trace+" //ctxweaver:skip") {
+		if !strings.Contains(got, trace+" //ctxweaver:skip\n") || !strings.Contains(got, trace+" //ctxweaver:skip // reason\n") {
 			t.Errorf("a canonical statement directive should keep the statement:\n%s", got)
 		}
-		if strings.Contains(got, "// ctxweaver:skip") {
-			t.Errorf("a malformed statement directive should not keep the statement:\n%s", got)
+		if strings.Count(got, trace) != 2 {
+			t.Errorf("the statement without a directive should be removed:\n%s", got)
+		}
+	})
+
+	t.Run("a file is held once when tests are loaded", func(t *testing.T) {
+		src := `package main
+
+import "context"
+
+func trace(context.Context) {}
+
+//ctxweaver:skp
+func Foo(ctx context.Context) {
+}
+`
+		result, dir := run(t, map[string]string{
+			"main.go":      src,
+			"main_test.go": "package main\n",
+		}, processor.WithTest(true))
+
+		if len(result.Warnings) != 1 || result.FilesHeld != 1 {
+			t.Errorf("Warnings = %v, FilesHeld = %d, want one of each", result.Warnings, result.FilesHeld)
+		}
+		if got := read(t, dir, "main.go"); got != src {
+			t.Errorf("main.go should be left as it is:\n%s", got)
 		}
 	})
 }
