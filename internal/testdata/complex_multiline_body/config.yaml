@@ -1,6 +1,6 @@
 template: |
   // ==================================================
-  // ctxweaver: auto-generated tracing code
+  // auto-generated tracing code by ctxweaver
   // DO NOT EDIT - this block is managed by ctxweaver
   // ==================================================
   txn := newrelic.FromContext({{.Ctx}}) // Extract transaction from context

@@ -19,7 +19,7 @@ Guidance for contributors and coding agents working in this repository.
 
 - `//ctxweaver:skip` - Skip processing for a file, a function, or a matching statement
 
-Only `//ctxweaver:skip` (line comment, lowercase name, no spaces) is a directive. Any other comment starting with `ctxweaver:` after `//` or `/*` has no effect, and `Process` returns a warning with its position in `ProcessResult.Warnings`. A warning does not fail the run.
+Only `//ctxweaver:skip` (line comment, lowercase name, no spaces) is a directive, optionally followed by a reason after `//` or ` - `. Any other comment addressed to ctxweaver (a malformed spelling, an unknown name, free text after `skip`, or `ctxweaver:` after a later `//` in another comment) has no effect, and `Process` returns a warning with its position in `ProcessResult.Warnings`. ctxweaver writes files, so it fails safe: a file with such a warning is not rewritten, and `ProcessResult.FilesHeld` counts it. A warning does not fail the run.
 
 ## Architecture
 

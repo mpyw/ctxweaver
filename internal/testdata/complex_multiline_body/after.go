@@ -12,7 +12,7 @@ import (
 // It demonstrates handling of nested structures and comments.
 func Foo(ctx context.Context, input string) (result string, err error) {
 	// ==================================================
-	// ctxweaver: auto-generated tracing code
+	// auto-generated tracing code by ctxweaver
 	// DO NOT EDIT - this block is managed by ctxweaver
 	// ==================================================
 	txn := newrelic.FromContext(ctx)    // Extract transaction from context
@@ -71,7 +71,7 @@ func Foo(ctx context.Context, input string) (result string, err error) {
 // Bar is another function to test multiple function handling.
 func Bar(ctx context.Context) error {
 	// ==================================================
-	// ctxweaver: auto-generated tracing code
+	// auto-generated tracing code by ctxweaver
 	// DO NOT EDIT - this block is managed by ctxweaver
 	// ==================================================
 	txn := newrelic.FromContext(ctx)    // Extract transaction from context

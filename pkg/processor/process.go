@@ -39,6 +39,7 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 
 	result := &ProcessResult{}
 	warned := make(map[string]bool)
+	held := make(map[string]bool)
 
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
@@ -76,12 +77,22 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 			result.FilesProcessed++
 
 			// A file can belong to more than one package when tests are
-			// loaded, so each warning is kept once.
-			for _, w := range processDirectiveWarnings(pkg.Fset, file) {
+			// loaded, so each warning and each file is counted once.
+			warnings := processDirectiveWarnings(pkg.Fset, file)
+			for _, w := range warnings {
 				if !warned[w] {
 					warned[w] = true
 					result.Warnings = append(result.Warnings, w)
 				}
+			}
+			// ctxweaver cannot tell what a directive it does not read was
+			// meant to do, so it leaves the file as it is.
+			if len(warnings) > 0 {
+				if !held[filename] {
+					held[filename] = true
+					result.FilesHeld++
+				}
+				continue
 			}
 
 			modified, err := p.processFile(pkg, dec, file, filename)
@@ -119,10 +130,11 @@ func (p *Processor) shouldProcessFile(filename string) bool {
 	return true
 }
 
-// processDirectiveWarnings returns a warning for each malformed ctxweaver
-// directive in the file, prefixed with its file:line position on disk. A
-// //line directive does not change that position. A malformed directive has
-// no effect. Generated files are not processed, so they are not checked.
+// processDirectiveWarnings returns a warning for each comment in the file
+// that is addressed to ctxweaver but is not a directive it reads, prefixed with
+// its file:line position on disk. A //line directive does not change that
+// position. A file with a warning is not rewritten. Generated files are not
+// processed, so they are not checked.
 func processDirectiveWarnings(fset *token.FileSet, file *ast.File) []string {
 	if ast.IsGenerated(file) {
 		return nil
@@ -130,9 +142,9 @@ func processDirectiveWarnings(fset *token.FileSet, file *ast.File) []string {
 	var warnings []string
 	for _, group := range file.Comments {
 		for _, c := range group.List {
-			if directive.Malformed(c.Text) {
+			if problem := directive.Problem(c.Text); problem != "" {
 				pos := fset.PositionFor(c.Slash, false)
-				warnings = append(warnings, fmt.Sprintf("%s:%d: %s", pos.Filename, pos.Line, directive.MalformedMessage))
+				warnings = append(warnings, fmt.Sprintf("%s:%d: %s", pos.Filename, pos.Line, problem))
 			}
 		}
 	}

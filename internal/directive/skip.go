@@ -15,39 +15,69 @@ const (
 	skipName      = "skip"
 )
 
-// isSkipComment reports whether a comment is the skip directive.
+// Warning messages for a comment that [Problem] reports.
+const (
+	MalformedMessage = "malformed ctxweaver directive: write it as //ctxweaver:name"
+	UnknownMessage   = "unknown ctxweaver directive: ctxweaver:"
+	SkipArgMessage   = "ctxweaver:skip takes no argument; write a reason after //"
+	HiddenMessage    = "ctxweaver directive after another comment: write it as its own //ctxweaver:name comment"
+)
+
+// read returns the name of the directive a comment holds, and the warning for
+// a comment addressed to ctxweaver that ctxweaver does not read. A comment
+// that is not addressed to ctxweaver returns two empty strings.
 //
-// Only Go's canonical directive form counts: "//ctxweaver:skip", with no space
-// after "//" and none after the colon. Trailing arguments are allowed. A
-// spelling that is close but not canonical is reported by [IsMalformed] and
-// has no effect here.
-func isSkipComment(text string) bool {
-	d, ok := ast.ParseDirective(token.NoPos, text)
-	return ok && d.Tool == directiveTool && d.Name == skipName
+// A trailing comment is a reason. The text is cut at the first "//" after the
+// leading one, so "//ctxweaver:skip // reason" and "//ctxweaver:skip//reason"
+// are both a skip. The part before the cut is addressed to ctxweaver when it
+// starts with "ctxweaver:" once any space is skipped. It is a directive when
+// [ast.ParseDirective] reads it as a line comment with the tool "ctxweaver".
+// Prose that mentions ctxweaver:skip partway through is not addressed. A part
+// after a cut that is addressed to ctxweaver, as in
+// "//nolint:foo //ctxweaver:skip", is reported: it looks like a directive, but
+// is not one.
+func read(text string) (name, problem string) {
+	body, line := strings.CutPrefix(text, "//")
+	if !line {
+		body = strings.TrimSuffix(strings.TrimPrefix(text, "/*"), "*/")
+	}
+	parts := strings.Split(body, "//")
+	if !addressed(parts[0]) {
+		if slices.ContainsFunc(parts[1:], addressed) {
+			return "", HiddenMessage
+		}
+		return "", ""
+	}
+	d, ok := ast.ParseDirective(token.NoPos, "//"+parts[0])
+	switch {
+	case !line || !ok || d.Tool != directiveTool:
+		return "", MalformedMessage
+	case d.Name != skipName:
+		return d.Name, UnknownMessage + d.Name
+	case d.Args != "" && d.Args != "-" && !strings.HasPrefix(d.Args, "- "):
+		// " - reason" is accepted for compatibility.
+		return d.Name, SkipArgMessage
+	}
+	return d.Name, ""
 }
 
-// MalformedMessage is the warning for a comment that [Malformed] matches.
-const MalformedMessage = "malformed ctxweaver directive: write it as //ctxweaver:name"
+func addressed(s string) bool {
+	return strings.HasPrefix(strings.TrimSpace(s), directiveTool+":")
+}
 
-// Malformed reports whether a comment is addressed to ctxweaver but is not a
-// valid directive.
-//
-// A comment is addressed to ctxweaver when its body, after "//" or "/*",
-// starts with "ctxweaver:" once optional whitespace is skipped. It is valid
-// when [ast.ParseDirective] accepts it with the tool "ctxweaver". Prose that
-// mentions "ctxweaver:skip" partway through a sentence is not addressed.
-func Malformed(text string) bool {
-	body, ok := strings.CutPrefix(text, "//")
-	if !ok {
-		if body, ok = strings.CutPrefix(text, "/*"); !ok {
-			return false
-		}
-	}
-	if !strings.HasPrefix(strings.TrimLeft(body, " \t"), directiveTool+":") {
-		return false
-	}
-	d, ok := ast.ParseDirective(token.NoPos, text)
-	return !ok || d.Tool != directiveTool
+// isSkipComment reports whether a comment is the skip directive:
+// "//ctxweaver:skip", optionally followed by a reason after "//" or " - ".
+func isSkipComment(text string) bool {
+	name, problem := read(text)
+	return name == skipName && problem == ""
+}
+
+// Problem returns the warning for a comment addressed to ctxweaver that is
+// not a directive ctxweaver reads, or "" for any other comment. Such a comment
+// has no effect, and the caller must not rewrite the file holding it.
+func Problem(text string) string {
+	_, problem := read(text)
+	return problem
 }
 
 // HasSkipDirective checks if node decorations contain a skip directive.

@@ -17,9 +17,33 @@ func TestIsSkipComment(t *testing.T) {
 			input: "//ctxweaver:skip",
 			want:  true,
 		},
-		"canonical with trailing content": {
+		"free text after the name": {
 			input: "//ctxweaver:skip this function",
+			want:  false, // a reason goes after "//"
+		},
+		"reason after //": {
+			input: "//ctxweaver:skip // this function",
 			want:  true,
+		},
+		"reason after // without a space": {
+			input: "//ctxweaver:skip //this function",
+			want:  true,
+		},
+		"reason glued to the name": {
+			input: "//ctxweaver:skip//this function",
+			want:  true,
+		},
+		"reason after a dash": {
+			input: "//ctxweaver:skip - this function",
+			want:  true,
+		},
+		"misspelled name": {
+			input: "//ctxweaver:skp",
+			want:  false,
+		},
+		"directive after another directive": {
+			input: "//nolint:foo //ctxweaver:skip",
+			want:  false,
 		},
 		"canonical with trailing whitespace": {
 			input: "//ctxweaver:skip  ",
@@ -287,29 +311,45 @@ func TestHasStmtSkipDirective(t *testing.T) {
 	}
 }
 
-func TestMalformed(t *testing.T) {
+func TestProblem(t *testing.T) {
 	t.Parallel()
-
 	tests := map[string]struct {
 		input string
-		want  bool
+		want  string
 	}{
-		"canonical":             {input: "//ctxweaver:skip", want: false},
-		"canonical lookalike":   {input: "//ctxweaver:skipx", want: false},
-		"space after //":        {input: "// ctxweaver:skip", want: true},
-		"space after the colon": {input: "//ctxweaver: skip", want: true},
-		"block comment":         {input: "/*ctxweaver:skip*/", want: true},
-		"uppercase name":        {input: "//ctxweaver:Skip", want: true},
-		"prose":                 {input: "// write ctxweaver:skip to opt out", want: false},
-		"other tool":            {input: "// nolint:errcheck", want: false},
+		"canonical":                          {input: "//ctxweaver:skip", want: ""},
+		"trailing whitespace":                {input: "//ctxweaver:skip \t", want: ""},
+		"reason after //":                    {input: "//ctxweaver:skip // legacy code", want: ""},
+		"reason after // without a space":    {input: "//ctxweaver:skip //legacy code", want: ""},
+		"reason glued to the name":           {input: "//ctxweaver:skip//legacy code", want: ""},
+		"reason after a dash":                {input: "//ctxweaver:skip - legacy code", want: ""},
+		"bare dash":                          {input: "//ctxweaver:skip -", want: ""},
+		"reason mentioning another tool":     {input: "//ctxweaver:skip // see //nolint:foo", want: ""},
+		"free text":                          {input: "//ctxweaver:skip legacy code", want: SkipArgMessage},
+		"dash without a space":               {input: "//ctxweaver:skip -legacy", want: SkipArgMessage},
+		"misspelled":                         {input: "//ctxweaver:skp", want: UnknownMessage + "skp"},
+		"misspelled with a reason":           {input: "//ctxweaver:skp // reason", want: UnknownMessage + "skp"},
+		"hyphenated name":                    {input: "//ctxweaver:skip-legacy", want: UnknownMessage + "skip-legacy"},
+		"lookalike":                          {input: "//ctxweaver:skipx", want: UnknownMessage + "skipx"},
+		"after another directive":            {input: "//nolint:foo //ctxweaver:skip", want: HiddenMessage},
+		"after another directive with space": {input: "//nolint:foo // ctxweaver:skip", want: HiddenMessage},
+		"after prose":                        {input: "// see //ctxweaver:skip", want: HiddenMessage},
+		"inside a block comment":             {input: "/* foo //ctxweaver:skip */", want: HiddenMessage},
+		"space after //":                     {input: "// ctxweaver:skip", want: MalformedMessage},
+		"space after the colon":              {input: "//ctxweaver: skip", want: MalformedMessage},
+		"no name":                            {input: "//ctxweaver:", want: MalformedMessage},
+		"block comment":                      {input: "/*ctxweaver:skip*/", want: MalformedMessage},
+		"uppercase name":                     {input: "//ctxweaver:Skip", want: MalformedMessage},
+		"prose":                              {input: "// write ctxweaver:skip to opt out", want: ""},
+		"other tool":                         {input: "//nolint:errcheck", want: ""},
+		"other tool with a reason":           {input: "//nolint:errcheck // reason", want: ""},
+		"url":                                {input: "// see https://example.com/ctxweaver:skip", want: ""},
 	}
-
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-
-			if got := Malformed(tt.input); got != tt.want {
-				t.Errorf("Malformed(%q) = %v, want %v", tt.input, got, tt.want)
+			if got := Problem(tt.input); got != tt.want {
+				t.Errorf("Problem(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

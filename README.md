@@ -454,15 +454,14 @@ func handler(ctx context.Context) {
 }
 ```
 
-Text after the directive is allowed, as in `//ctxweaver:skip legacy code`.
+To say why, write a reason after `//`, as in `//ctxweaver:skip // traced upstream`. A reason after ` - ` is also accepted, for compatibility.
 
-### Directive syntax
+> [!IMPORTANT]
+> A comment such as `//ctxweaver:bogus` gets a warning, as does any other comment starting with `ctxweaver:`.
+> The file that holds it is left unchanged. The run still exits 0.
 
-Only `//ctxweaver:skip` is a directive: a line comment, a lowercase name, and no spaces. Any other comment that starts with `ctxweaver:` after `//` or `/*` is reported with a warning on stderr, and has no effect. The warning does not fail the run:
-
-```text
-warning: /home/me/app/handler.go:7: malformed ctxweaver directive: write it as //ctxweaver:name
-```
+> [!WARNING]
+> Do not start a comment in the template with `ctxweaver:`, as in `// ctxweaver: generated`. Every woven file would then hold a malformed directive, and ctxweaver would not rewrite it again.
 
 ## Existing Statement Detection
 
