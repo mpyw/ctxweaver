@@ -2,6 +2,7 @@ package processor_test
 
 import (
 	"bytes"
+	"go/format"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1158,6 +1159,251 @@ func Removed(ctx context.Context) {
 		}
 		if strings.Contains(got, "// ctxweaver:skip") {
 			t.Errorf("a malformed statement directive should not keep the statement:\n%s", got)
+		}
+	})
+}
+
+func TestProcess_LineDirectives(t *testing.T) {
+	tmpl, _ := template.Parse(`defer trace({{.Ctx}})`)
+	registry := config.NewCarrierRegistry(true)
+
+	run := func(t *testing.T, files map[string]string, opts ...processor.Option) (*processor.ProcessResult, string) {
+		t.Helper()
+		tmpDir := setupTestModule(t, files)
+		oldWd, _ := os.Getwd()
+		_ = os.Chdir(tmpDir)
+		t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+		result, err := processor.New(registry, tmpl, nil, opts...).Process([]string{"./..."})
+		if err != nil {
+			t.Fatalf("Process failed: %v", err)
+		}
+		if len(result.Errors) > 0 {
+			t.Fatalf("unexpected errors: %v", result.Errors)
+		}
+		return result, tmpDir
+	}
+
+	read := func(t *testing.T, dir, name string) string {
+		t.Helper()
+		content, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", name, err)
+		}
+		return string(content)
+	}
+
+	t.Run("file name comes from disk", func(t *testing.T) {
+		const body = `package main
+
+import "context"
+
+func trace(context.Context) {}
+
+func Foo(ctx context.Context) {
+	println()
+}
+`
+		tests := map[string]string{
+			"other file":    "//line fake.tmpl:1\n",
+			"test file":     "//line gen_test.go:1\n",
+			"testdata file": "//line /src/testdata/gen.go:1\n",
+		}
+		for name, directive := range tests {
+			t.Run(name, func(t *testing.T) {
+				result, dir := run(t, map[string]string{"main.go": directive + body})
+
+				if result.FilesProcessed != 1 || result.FilesModified != 1 {
+					t.Errorf("FilesProcessed = %d, FilesModified = %d, want 1 and 1", result.FilesProcessed, result.FilesModified)
+				}
+				want := directive + strings.Replace(body, "{\n", "{\n\tdefer trace(ctx)\n\n", 1)
+				if got := read(t, dir, "main.go"); got != want {
+					t.Errorf("main.go =\n%s\nwant\n%s", got, want)
+				}
+				entries, _ := os.ReadDir(dir)
+				for _, e := range entries {
+					if name := e.Name(); name != "go.mod" && name != "main.go" {
+						t.Errorf("unexpected file %s", name)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("warning names the file on disk", func(t *testing.T) {
+		result, dir := run(t, map[string]string{
+			"main.go": `//line fake.tmpl:100
+package main
+
+import "context"
+
+func trace(context.Context) {}
+
+// ctxweaver:skip
+func Foo(ctx context.Context) {
+}
+`,
+		})
+
+		want := filepath.Join(dir, "main.go") + ":8: " + directive.MalformedMessage
+		if len(result.Warnings) != 1 || strings.TrimPrefix(result.Warnings[0], "/private") != strings.TrimPrefix(want, "/private") {
+			t.Errorf("Warnings = %v, want [%s]", result.Warnings, want)
+		}
+	})
+
+	t.Run("directives stay at column 1", func(t *testing.T) {
+		const src = `package main
+
+import (
+	"context"
+	"runtime"
+)
+
+func trace(context.Context) {}
+
+func Woven(ctx context.Context) int {
+//line woven.tmpl:10
+	_, _, line, _ := runtime.Caller(0)
+	return line
+}
+
+func Unwoven() int {
+//line unwoven.tmpl:20
+	_, _, line, _ := runtime.Caller(0)
+	return line
+}
+
+func Nested(ctx context.Context) {
+	if ctx != nil {
+//line nested.tmpl:30
+		println()
+	}
+}
+
+func Indented(ctx context.Context) {
+	//line indented.tmpl:40
+	// see //line other.tmpl:50
+	println()
+}
+
+//line top.tmpl:60
+func Block() {
+/*line block.tmpl:70*/
+	println()
+}
+
+const Raw = ` + "`" + `
+//line raw.tmpl:80
+	//line raw.tmpl:90
+` + "`" + `
+`
+		const want = `package main
+
+import (
+	"context"
+	"runtime"
+)
+
+func trace(context.Context) {}
+
+func Woven(ctx context.Context) int {
+	defer trace(ctx)
+
+//line woven.tmpl:10
+	_, _, line, _ := runtime.Caller(0)
+	return line
+}
+
+func Unwoven() int {
+//line unwoven.tmpl:20
+	_, _, line, _ := runtime.Caller(0)
+	return line
+}
+
+func Nested(ctx context.Context) {
+	defer trace(ctx)
+
+	if ctx != nil {
+//line nested.tmpl:30
+		println()
+	}
+}
+
+func Indented(ctx context.Context) {
+	defer trace(ctx)
+
+	//line indented.tmpl:40
+	// see //line other.tmpl:50
+	println()
+}
+
+//line top.tmpl:60
+func Block() {
+	/*line block.tmpl:70*/
+	println()
+}
+
+const Raw = ` + "`" + `
+//line raw.tmpl:80
+	//line raw.tmpl:90
+` + "`" + `
+`
+		_, dir := run(t, map[string]string{"main.go": src})
+
+		got := read(t, dir, "main.go")
+		if got != want {
+			t.Errorf("main.go =\n%s\nwant\n%s", got, want)
+		}
+		// gofmt indents a /*line*/ directive too. It works at any column.
+		formatted, err := format.Source([]byte(got))
+		if err != nil {
+			t.Fatalf("output does not parse: %v", err)
+		}
+		if string(formatted) != got {
+			t.Errorf("output is not gofmt-stable:\n%s", formatted)
+		}
+	})
+
+	t.Run("dropped directive does not shift the others", func(t *testing.T) {
+		_, dir := run(t, map[string]string{
+			"main.go": `package main
+
+import "context"
+
+func trace(context.Context) {}
+
+func Removed(ctx context.Context) {
+//line removed.tmpl:10
+	defer trace(ctx)
+//line kept.tmpl:20
+	println()
+}
+
+func Kept() {
+//line removed.tmpl:10
+	println()
+}
+`,
+		}, processor.WithRemove(true))
+
+		const want = `package main
+
+import "context"
+
+func trace(context.Context) {}
+
+func Removed(ctx context.Context) {
+//line kept.tmpl:20
+	println()
+}
+
+func Kept() {
+//line removed.tmpl:10
+	println()
+}
+`
+		if got := read(t, dir, "main.go"); got != want {
+			t.Errorf("main.go =\n%s\nwant\n%s", got, want)
 		}
 	})
 }

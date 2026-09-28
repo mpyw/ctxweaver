@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
+	"go/scanner"
 	"go/token"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/dave/dst/decorator"
@@ -58,12 +60,14 @@ func (p *Processor) Process(patterns []string) (*ProcessResult, error) {
 		dec := decorator.NewDecoratorFromPackage(pkg)
 
 		for _, file := range pkg.Syntax {
-			// Get filename from AST position (more reliable than index-based access)
-			pos := pkg.Fset.Position(file.Pos())
-			if !pos.IsValid() {
+			// Get filename from the token.File (more reliable than index-based
+			// access). Position().Filename would follow a //line directive
+			// above the package clause and name a file that is not on disk.
+			tf := pkg.Fset.File(file.Pos())
+			if tf == nil {
 				continue
 			}
-			filename := pos.Filename
+			filename := tf.Name()
 
 			if !p.shouldProcessFile(filename) {
 				continue
@@ -116,9 +120,9 @@ func (p *Processor) shouldProcessFile(filename string) bool {
 }
 
 // processDirectiveWarnings returns a warning for each malformed ctxweaver
-// directive in the file, prefixed with its file:line position. A malformed
-// directive has no effect. Generated files are not processed, so they are not
-// checked.
+// directive in the file, prefixed with its file:line position on disk. A
+// //line directive does not change that position. A malformed directive has
+// no effect. Generated files are not processed, so they are not checked.
 func processDirectiveWarnings(fset *token.FileSet, file *ast.File) []string {
 	if ast.IsGenerated(file) {
 		return nil
@@ -127,7 +131,7 @@ func processDirectiveWarnings(fset *token.FileSet, file *ast.File) []string {
 	for _, group := range file.Comments {
 		for _, c := range group.List {
 			if directive.Malformed(c.Text) {
-				pos := fset.Position(c.Slash)
+				pos := fset.PositionFor(c.Slash, false)
 				warnings = append(warnings, fmt.Sprintf("%s:%d: %s", pos.Filename, pos.Line, directive.MalformedMessage))
 			}
 		}
@@ -185,10 +189,11 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 	if err := format.Node(&buf, fset, f); err != nil {
 		return false, fmt.Errorf("failed to format file: %w", err)
 	}
+	formatted := processLineDirectives(pkg.Fset, astFile, buf.Bytes())
 
 	// Clean up unused imports using goimports
 	// This handles the case where template changes make old imports unused
-	result, err := imports.Process(filename, buf.Bytes(), &imports.Options{
+	result, err := imports.Process(filename, formatted, &imports.Options{
 		Comments:   true,
 		TabIndent:  true,
 		TabWidth:   8,
@@ -196,7 +201,7 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 	})
 	if err != nil {
 		// If goimports fails, use the formatted output without cleanup
-		result = buf.Bytes()
+		result = formatted
 	}
 
 	// Write if not dry run
@@ -207,4 +212,74 @@ func (p *Processor) processFile(pkg *packages.Package, dec *decorator.Decorator,
 	}
 
 	return true, nil
+}
+
+// processLineDirectives moves each //line directive of orig back to column 1
+// in src, the formatted output. A //line comment is a directive only at column
+// 1, but the dst restorer gives comments new positions, so go/printer indents
+// the ones inside function bodies. Output comments are paired with the
+// original ones in order by text, so a //line comment the weave added or
+// dropped does not shift the others. A /*line*/ directive works at any column,
+// and gofmt indents it too, so it is left as printed.
+func processLineDirectives(fset *token.FileSet, orig *ast.File, src []byte) []byte {
+	const linePrefix = "//line "
+	type lineComment struct {
+		text      string
+		directive bool
+	}
+	var want []lineComment
+	hasDirective := false
+	for _, group := range orig.Comments {
+		for _, c := range group.List {
+			if strings.HasPrefix(c.Text, linePrefix) {
+				atColumn1 := fset.PositionFor(c.Slash, false).Column == 1
+				want = append(want, lineComment{text: c.Text, directive: atColumn1})
+				hasDirective = hasDirective || atColumn1
+			}
+		}
+	}
+	if !hasDirective {
+		return src
+	}
+
+	// The scanner reads comments only, so text in strings is never touched.
+	var s scanner.Scanner
+	tf := token.NewFileSet().AddFile("", -1, len(src))
+	s.Init(tf, src, nil, scanner.ScanComments)
+	var cuts [][2]int // indentation before a directive: [line start, comment start)
+	next := 0
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok != token.COMMENT || !strings.HasPrefix(lit, linePrefix) {
+			continue
+		}
+		i := slices.IndexFunc(want[next:], func(c lineComment) bool { return c.text == lit })
+		if i < 0 {
+			continue
+		}
+		matched := want[next+i]
+		next += i + 1
+		if !matched.directive {
+			continue
+		}
+		off := tf.Offset(pos)
+		start := bytes.LastIndexByte(src[:off], '\n') + 1
+		if start < off && len(bytes.TrimLeft(src[start:off], " \t")) == 0 {
+			cuts = append(cuts, [2]int{start, off})
+		}
+	}
+	if len(cuts) == 0 {
+		return src
+	}
+
+	out := make([]byte, 0, len(src))
+	prev := 0
+	for _, c := range cuts {
+		out = append(out, src[prev:c[0]]...)
+		prev = c[1]
+	}
+	return append(out, src[prev:]...)
 }
