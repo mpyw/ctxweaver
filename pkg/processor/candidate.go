@@ -112,7 +112,7 @@ func (p *Processor) processCandidate(c funcCandidate, df *dst.File, pkgPath stri
 // This is the entry point of the candidate pipeline: process.go hands each
 // decorated file here.
 //
-//declscope:package
+//declscope:shared
 func (p *Processor) processCandidates(df *dst.File, pkgPath string) (bool, error) {
 	candidates := p.collectCandidates(df)
 

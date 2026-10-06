@@ -57,7 +57,7 @@ func (a removeAction) Apply(body *dst.BlockStmt, _ string) bool {
 // This is the entry point of the action layer: candidate.go asks here which
 // action a body needs.
 //
-//declscope:package
+//declscope:shared
 func (p *Processor) detectAction(body *dst.BlockStmt, renderedStmt string) (Action, error) {
 	// Parse the rendered statements for skeleton comparison
 	targetStmts, err := dstutil.ParseStatements(renderedStmt)

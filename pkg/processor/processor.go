@@ -102,7 +102,7 @@ func (f *FuncFilter) Match(funcName string, isMethod, isExported bool) bool {
 // Its behavior is implemented across process.go, candidate.go and action.go,
 // so the fields are shared with the whole package.
 //
-//declscope:package
+//declscope:shared
 type Processor struct {
 	registry   *config.CarrierRegistry
 	tmpl       *template.Template

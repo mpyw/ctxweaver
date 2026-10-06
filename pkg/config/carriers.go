@@ -17,7 +17,7 @@ var defaultCarriersYAML []byte
 //
 // Shared with registry.go: NewCarrierRegistry seeds registries from this list.
 //
-//declscope:package
+//declscope:shared
 var defaultCarriers []CarrierDef
 
 func init() {
