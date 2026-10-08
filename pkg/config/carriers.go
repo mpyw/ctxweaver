@@ -8,9 +8,6 @@ import (
 	"github.com/mpyw/ctxweaver/internal"
 )
 
-//go:embed carriers.yaml
-var defaultCarriersYAML []byte
-
 // defaultCarriers holds the built-in carrier definitions embedded from
 // carriers.yaml. Parsed at init time - failure here means corrupted embedded
 // files.
@@ -19,6 +16,9 @@ var defaultCarriersYAML []byte
 //
 //declscope:shared
 var defaultCarriers []CarrierDef
+
+//go:embed carriers.yaml
+var defaultCarriersYAML []byte
 
 func init() {
 	var carriersFile CarriersFile

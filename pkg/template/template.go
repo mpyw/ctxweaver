@@ -45,14 +45,6 @@ type Template struct {
 	raw  string
 }
 
-// funcs returns the template function map.
-func funcs() template.FuncMap {
-	return template.FuncMap{
-		"quote":    strconv.Quote,
-		"backtick": func(s string) string { return "`" + s + "`" },
-	}
-}
-
 // Parse parses a template string.
 func Parse(text string) (*Template, error) {
 	tmpl, err := template.New("stmt").Funcs(funcs()).Parse(text)
@@ -83,4 +75,12 @@ func (t *Template) Render(vars Vars) (string, error) {
 // Raw returns the original template string.
 func (t *Template) Raw() string {
 	return t.raw
+}
+
+// funcs returns the template function map.
+func funcs() template.FuncMap {
+	return template.FuncMap{
+		"quote":    strconv.Quote,
+		"backtick": func(s string) string { return "`" + s + "`" },
+	}
 }
