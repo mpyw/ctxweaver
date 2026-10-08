@@ -30,6 +30,29 @@ func shouldSkipCandidate(decl *dst.FuncDecl) bool {
 	return false
 }
 
+// processCandidates collects and processes the candidate functions in the DST
+// file. Relies on dst.Ident.Path set by NewDecoratorFromPackage for import
+// resolution.
+//
+// This is the entry point of the candidate pipeline: process.go hands each
+// decorated file here.
+//
+//declscope:shared
+func (p *Processor) processCandidates(df *dst.File, pkgPath string) (bool, error) {
+	candidates := p.collectCandidates(df)
+
+	var modified bool
+	for _, c := range candidates {
+		m, err := p.processCandidate(c, df, pkgPath)
+		if err != nil {
+			return false, err
+		}
+		modified = modified || m
+	}
+
+	return modified, nil
+}
+
 // candidateMatchesFilter checks if a function matches the configured filter.
 func (p *Processor) candidateMatchesFilter(decl *dst.FuncDecl) bool {
 	if p.funcFilter == nil {
@@ -103,27 +126,4 @@ func (p *Processor) processCandidate(c funcCandidate, df *dst.File, pkgPath stri
 	}
 
 	return action.Apply(c.decl.Body, rendered), nil
-}
-
-// processCandidates collects and processes the candidate functions in the DST
-// file. Relies on dst.Ident.Path set by NewDecoratorFromPackage for import
-// resolution.
-//
-// This is the entry point of the candidate pipeline: process.go hands each
-// decorated file here.
-//
-//declscope:shared
-func (p *Processor) processCandidates(df *dst.File, pkgPath string) (bool, error) {
-	candidates := p.collectCandidates(df)
-
-	var modified bool
-	for _, c := range candidates {
-		m, err := p.processCandidate(c, df, pkgPath)
-		if err != nil {
-			return false, err
-		}
-		modified = modified || m
-	}
-
-	return modified, nil
 }

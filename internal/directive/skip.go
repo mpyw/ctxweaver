@@ -10,11 +10,6 @@ import (
 	"github.com/dave/dst"
 )
 
-const (
-	directiveTool = "ctxweaver"
-	skipName      = "skip"
-)
-
 // Warning messages for a comment that [Problem] reports.
 const (
 	MalformedMessage = "malformed ctxweaver directive: write it as //ctxweaver:name"
@@ -22,6 +17,33 @@ const (
 	SkipArgMessage   = "ctxweaver:skip takes no argument; write a reason after //"
 	HiddenMessage    = "ctxweaver directive after another comment: write it as its own //ctxweaver:name comment"
 )
+
+const (
+	directiveTool = "ctxweaver"
+	skipName      = "skip"
+)
+
+// Problem returns the warning for a comment addressed to ctxweaver that is
+// not a directive ctxweaver reads, or "" for any other comment. Such a comment
+// has no effect, and the caller must not rewrite the file holding it.
+func Problem(text string) string {
+	_, problem := read(text)
+	return problem
+}
+
+// HasSkipDirective checks if node decorations contain a skip directive.
+// This is used for file-level and function-level skip directives.
+func HasSkipDirective(decs *dst.NodeDecs) bool {
+	return slices.ContainsFunc(decs.Start.All(), isSkipComment)
+}
+
+// HasStmtSkipDirective checks if a statement has a skip directive comment.
+// Checks both Start (before) and End (trailing) decorations.
+func HasStmtSkipDirective(stmt dst.Stmt) bool {
+	decs := stmt.Decorations()
+	return slices.ContainsFunc(decs.Start.All(), isSkipComment) ||
+		slices.ContainsFunc(decs.End.All(), isSkipComment)
+}
 
 // read returns the name of the directive a comment holds, and the warning for
 // a comment addressed to ctxweaver that ctxweaver does not read. A comment
@@ -70,26 +92,4 @@ func addressed(s string) bool {
 func isSkipComment(text string) bool {
 	name, problem := read(text)
 	return name == skipName && problem == ""
-}
-
-// Problem returns the warning for a comment addressed to ctxweaver that is
-// not a directive ctxweaver reads, or "" for any other comment. Such a comment
-// has no effect, and the caller must not rewrite the file holding it.
-func Problem(text string) string {
-	_, problem := read(text)
-	return problem
-}
-
-// HasSkipDirective checks if node decorations contain a skip directive.
-// This is used for file-level and function-level skip directives.
-func HasSkipDirective(decs *dst.NodeDecs) bool {
-	return slices.ContainsFunc(decs.Start.All(), isSkipComment)
-}
-
-// HasStmtSkipDirective checks if a statement has a skip directive comment.
-// Checks both Start (before) and End (trailing) decorations.
-func HasStmtSkipDirective(stmt dst.Stmt) bool {
-	decs := stmt.Decorations()
-	return slices.ContainsFunc(decs.Start.All(), isSkipComment) ||
-		slices.ContainsFunc(decs.End.All(), isSkipComment)
 }
